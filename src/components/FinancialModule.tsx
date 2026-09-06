@@ -46,6 +46,7 @@ import { DigitalSignaturePad } from './DigitalSignaturePad';
 import { EditTransactionModal } from './EditTransactionModal';
 
 export const INCOME_CATEGORIES = [
+  'Compra/Venda de Lições',
   'Cota 5% Igreja',
   'Doações Especiais',
   'Sorteios/Rifas'
