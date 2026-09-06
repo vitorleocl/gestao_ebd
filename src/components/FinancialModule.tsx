@@ -20,7 +20,9 @@ import {
   Camera,
   Tag,
   PenTool,
-  CheckCircle2
+  CheckCircle2,
+  Pencil,
+  RotateCcw
 } from 'lucide-react';
 import { 
   collection, 
@@ -41,6 +43,7 @@ import { formatCurrency, formatDate, getAccountName, getStatusBadge } from '../u
 import { uploadReceiptImage } from '../utils/storage';
 import { ReceiptModal } from './ReceiptModal';
 import { DigitalSignaturePad } from './DigitalSignaturePad';
+import { EditTransactionModal } from './EditTransactionModal';
 
 export const INCOME_CATEGORIES = [
   'Cota 5% Igreja',
@@ -74,8 +77,11 @@ export const FinancialModule: React.FC<FinancialModuleProps> = ({
   const [selectedAccount, setSelectedAccount] = useState<'all' | AccountType>('all');
   const [selectedType, setSelectedType] = useState<'all' | TransactionType>('all');
   const [selectedStatus, setSelectedStatus] = useState<'all' | TransactionStatus>('all');
-  const [periodFilter, setPeriodFilter] = useState<'month' | 'year' | 'all'>('month');
+  const [periodFilter, setPeriodFilter] = useState<'month' | 'year' | 'all'>('all');
   const [searchQuery, setSearchQuery] = useState('');
+
+  // Edit Transaction State
+  const [editingTransaction, setEditingTransaction] = useState<FinancialTransaction | null>(null);
 
   // New Transaction Form Modal
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -128,30 +134,65 @@ export const FinancialModule: React.FC<FinancialModuleProps> = ({
 
       // Period filter
       if (periodFilter !== 'all') {
-        const transDate = new Date(t.date);
         const now = new Date();
-        if (periodFilter === 'month') {
-          if (transDate.getMonth() !== now.getMonth() || transDate.getFullYear() !== now.getFullYear()) {
-            return false;
+        const currentYear = now.getFullYear();
+        const currentMonth = now.getMonth() + 1;
+
+        let transYear: number | null = null;
+        let transMonth: number | null = null;
+
+        if (t.date) {
+          if (t.date.includes('-')) {
+            const parts = t.date.split('T')[0].split('-');
+            if (parts.length >= 2) {
+              transYear = parseInt(parts[0], 10);
+              transMonth = parseInt(parts[1], 10);
+            }
           }
-        } else if (periodFilter === 'year') {
-          if (transDate.getFullYear() !== now.getFullYear()) {
-            return false;
+          if (transYear === null || isNaN(transYear)) {
+            const d = new Date(t.date);
+            if (!isNaN(d.getTime())) {
+              transYear = d.getFullYear();
+              transMonth = d.getMonth() + 1;
+            }
+          }
+        }
+
+        if (transYear !== null && transMonth !== null) {
+          if (periodFilter === 'month') {
+            if (transYear !== currentYear || transMonth !== currentMonth) {
+              return false;
+            }
+          } else if (periodFilter === 'year') {
+            if (transYear !== currentYear) {
+              return false;
+            }
           }
         }
       }
 
-      // Search query
+      // Search query with full null-safety
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase();
-        const matchesDesc = t.description.toLowerCase().includes(q);
-        const matchesCreator = t.createdByName.toLowerCase().includes(q);
-        const matchesAmount = t.amount.toString().includes(q);
-        if (!matchesDesc && !matchesCreator && !matchesAmount) return false;
+        const desc = (t.description || '').toLowerCase();
+        const creator = (t.createdByName || '').toLowerCase();
+        const category = (t.category || '').toLowerCase();
+        const amount = (t.amount ?? '').toString();
+        
+        const matchesDesc = desc.includes(q);
+        const matchesCreator = creator.includes(q);
+        const matchesCategory = category.includes(q);
+        const matchesAmount = amount.includes(q);
+        
+        if (!matchesDesc && !matchesCreator && !matchesCategory && !matchesAmount) return false;
       }
 
       return true;
-    }).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+    }).sort((a, b) => {
+      const timeA = a.date ? new Date(a.date).getTime() : 0;
+      const timeB = b.date ? new Date(b.date).getTime() : 0;
+      return (isNaN(timeB) ? 0 : timeB) - (isNaN(timeA) ? 0 : timeA);
+    });
   }, [transactions, selectedAccount, selectedType, selectedStatus, periodFilter, searchQuery]);
 
   // Balance calculation (only approved transactions count for liquid balance)
@@ -717,14 +758,35 @@ export const FinancialModule: React.FC<FinancialModuleProps> = ({
             <p className="text-xs">Carregando extrato financeiro...</p>
           </div>
         ) : filteredTransactions.length === 0 ? (
-          <div className="p-12 text-center space-y-2">
+          <div className="p-12 text-center space-y-3">
             <div className="w-12 h-12 rounded-full bg-slate-100 flex items-center justify-center mx-auto text-slate-400">
               <Wallet className="w-6 h-6" />
             </div>
-            <p className="text-sm font-semibold text-slate-700">Nenhum lançamento encontrado</p>
-            <p className="text-xs text-slate-500 max-w-sm mx-auto">
-              Não há transações cadastradas para os filtros selecionados. Clique em "Novo Lançamento" para cadastrar.
-            </p>
+            <div>
+              <p className="text-sm font-bold text-slate-800">
+                {transactions.length > 0 ? 'Nenhum lançamento para os filtros ativos' : 'Nenhum lançamento cadastrado'}
+              </p>
+              <p className="text-xs text-slate-500 max-w-md mx-auto mt-1">
+                {transactions.length > 0 
+                  ? `Existem ${transactions.length} lançamentos registrados no sistema, porém estão ocultos pelos filtros selecionados acima.`
+                  : 'Ainda não há nenhuma movimentação financeira registrada nos Caixas da EBD.'}
+              </p>
+            </div>
+            {transactions.length > 0 && (
+              <button
+                onClick={() => {
+                  setSelectedAccount('all');
+                  setSelectedType('all');
+                  setSelectedStatus('all');
+                  setPeriodFilter('all');
+                  setSearchQuery('');
+                }}
+                className="inline-flex items-center gap-1.5 px-4 py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-xs font-bold rounded-xl transition-colors cursor-pointer border border-indigo-200"
+              >
+                <RotateCcw className="w-3.5 h-3.5" />
+                <span>Limpar Filtros e Ver Todos ({transactions.length})</span>
+              </button>
+            )}
           </div>
         ) : (
           <div className="divide-y divide-slate-100">
@@ -753,7 +815,9 @@ export const FinancialModule: React.FC<FinancialModuleProps> = ({
 
                     <div className="space-y-1">
                       <div className="flex flex-wrap items-center gap-2">
-                        <span className="font-semibold text-slate-900 text-sm">{t.description}</span>
+                        <span className="font-semibold text-slate-900 text-sm">
+                          {t.description || t.category || (isIncome ? 'Entrada financeira' : 'Saída financeira')}
+                        </span>
                         
                         {/* Account Badge */}
                         <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
@@ -801,7 +865,7 @@ export const FinancialModule: React.FC<FinancialModuleProps> = ({
                   </div>
 
                   {/* Right: Amount & Actions */}
-                  <div className="flex items-center justify-between sm:justify-end gap-3 pl-13 sm:pl-0">
+                  <div className="flex items-center justify-between sm:justify-end gap-2 sm:gap-3 pl-13 sm:pl-0">
                     
                     {/* Amount */}
                     <div className="text-left sm:text-right">
@@ -820,7 +884,7 @@ export const FinancialModule: React.FC<FinancialModuleProps> = ({
                           signatureUrl: t.signatureUrl,
                           signatureName: t.signatureName,
                           signatureDate: t.signatureDate || t.createdAt,
-                          title: t.description,
+                          title: t.description || t.category || 'Lançamento',
                           description: `${getAccountName(t.account)} — ${formatCurrency(t.amount)} (${formatDate(t.date)})`
                         })}
                         title="Visualizar comprovante e/ou assinatura digital"
@@ -834,6 +898,19 @@ export const FinancialModule: React.FC<FinancialModuleProps> = ({
                         <span className="hidden sm:inline">
                           {t.receiptUrl && t.signatureUrl ? 'Anexos (2)' : t.receiptUrl ? 'Comprovante' : 'Assinatura'}
                         </span>
+                      </button>
+                    )}
+
+                    {/* Edit action (Creator, Dirigente, Master) */}
+                    {(isMaster || isDirigente || t.createdByUid === currentUser?.uid) && (
+                      <button
+                        disabled={isProcessing}
+                        onClick={() => setEditingTransaction(t)}
+                        title="Editar lançamento (retornará para reavaliação)"
+                        className="p-1.5 text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg border border-slate-200 hover:border-indigo-200 transition-colors cursor-pointer disabled:opacity-50 flex items-center gap-1 text-xs font-medium"
+                      >
+                        <Pencil className="w-3.5 h-3.5" />
+                        <span className="hidden sm:inline">Editar</span>
                       </button>
                     )}
 
@@ -1264,6 +1341,17 @@ export const FinancialModule: React.FC<FinancialModuleProps> = ({
           </div>
         </div>
       )}
+
+      {/* EDIT TRANSACTION MODAL */}
+      <EditTransactionModal
+        isOpen={!!editingTransaction}
+        onClose={() => setEditingTransaction(null)}
+        transaction={editingTransaction}
+        onSuccess={(msg) => {
+          setActionMessage({ type: 'success', text: msg });
+          setTimeout(() => setActionMessage(null), 6000);
+        }}
+      />
 
     </div>
   );

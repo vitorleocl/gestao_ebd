@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { BookOpen, Shield, CheckCircle2, AlertCircle } from 'lucide-react';
+import { Shield, CheckCircle2, AlertCircle } from 'lucide-react';
+import { BibleFlameIcon } from './BibleFlameIcon';
 import { useAuth } from '../context/AuthContext';
 
 export const LoginScreen: React.FC = () => {
@@ -29,9 +30,9 @@ export const LoginScreen: React.FC = () => {
       <div className="w-full max-w-md bg-white rounded-2xl shadow-xl shadow-slate-200/70 border border-slate-200 overflow-hidden">
         
         {/* Header Banner */}
-        <div className="bg-gradient-to-r from-indigo-700 via-indigo-800 to-slate-900 p-8 text-center text-white relative">
-          <div className="w-16 h-16 rounded-2xl bg-white/10 backdrop-blur-md mx-auto flex items-center justify-center mb-4 shadow-inner border border-white/20">
-            <BookOpen className="w-8 h-8 text-indigo-200" />
+        <div className="bg-gradient-to-r from-indigo-900 via-indigo-950 to-slate-950 p-8 text-center text-white relative">
+          <div className="w-18 h-18 rounded-2xl bg-white/10 backdrop-blur-md mx-auto flex items-center justify-center mb-4 shadow-inner border border-white/20 p-2">
+            <BibleFlameIcon className="w-12 h-12 drop-shadow-md" />
           </div>
           <h1 className="text-2xl font-black tracking-tight">Sistema de Gestão EBD</h1>
           <p className="text-sm text-indigo-200 mt-1 font-medium">Escola Bíblica Dominical</p>

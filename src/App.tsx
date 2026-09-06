@@ -15,7 +15,8 @@ import { FinancialModule } from './components/FinancialModule';
 import { LessonsModule } from './components/LessonsModule';
 import { UsersManagementModule } from './components/UsersManagementModule';
 import { FinancialTransaction, LessonOrder, EbdClass } from './types';
-import { BookOpen, WifiOff } from 'lucide-react';
+import { WifiOff } from 'lucide-react';
+import { BibleFlameIcon } from './components/BibleFlameIcon';
 
 const MainLayout: React.FC = () => {
   const { currentUser, userProfile, loading: authLoading, isMaster, isApproved } = useAuth();
@@ -123,8 +124,8 @@ const MainLayout: React.FC = () => {
   if (authLoading) {
     return (
       <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center p-4">
-        <div className="w-12 h-12 rounded-2xl bg-indigo-600 flex items-center justify-center text-white shadow-lg shadow-indigo-200 animate-bounce mb-4">
-          <BookOpen className="w-6 h-6" />
+        <div className="w-14 h-14 rounded-2xl bg-indigo-950 flex items-center justify-center text-white shadow-lg shadow-indigo-200 animate-bounce mb-4 p-2 border border-indigo-700/50">
+          <BibleFlameIcon className="w-9 h-9" />
         </div>
         <p className="text-sm font-bold text-slate-800">Carregando Gestão EBD...</p>
         <p className="text-xs text-slate-500 mt-1">Conectando ao banco de dados</p>

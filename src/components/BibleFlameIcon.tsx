@@ -1,0 +1,95 @@
+import React from 'react';
+
+interface BibleFlameIconProps {
+  className?: string;
+  size?: number | string;
+}
+
+export const BibleFlameIcon: React.FC<BibleFlameIconProps> = ({ 
+  className = 'w-6 h-6',
+  size 
+}) => {
+  return (
+    <svg 
+      xmlns="http://www.w3.org/2000/svg" 
+      viewBox="0 0 64 64" 
+      fill="none"
+      className={className}
+      style={size ? { width: size, height: size } : undefined}
+      aria-label="Bíblia Sagrada e Chama de Fogo"
+    >
+      <defs>
+        <linearGradient id="svgFlameGrad" x1="32" y1="4" x2="32" y2="42" gradientUnits="userSpaceOnUse">
+          <stop offset="0%" stopColor="#EF4444" />
+          <stop offset="35%" stopColor="#F97316" />
+          <stop offset="70%" stopColor="#F59E0B" />
+          <stop offset="100%" stopColor="#FDE047" />
+        </linearGradient>
+        <linearGradient id="svgInnerFlameGrad" x1="32" y1="14" x2="32" y2="38" gradientUnits="userSpaceOnUse">
+          <stop offset="0%" stopColor="#FEF08A" />
+          <stop offset="60%" stopColor="#FBBF24" />
+          <stop offset="100%" stopColor="#F97316" />
+        </linearGradient>
+        <linearGradient id="svgBibleCover" x1="4" y1="44" x2="60" y2="60" gradientUnits="userSpaceOnUse">
+          <stop offset="0%" stopColor="#312E81" />
+          <stop offset="50%" stopColor="#4338CA" />
+          <stop offset="100%" stopColor="#1E1B4B" />
+        </linearGradient>
+        <linearGradient id="svgPageGrad" x1="32" y1="42" x2="32" y2="58" gradientUnits="userSpaceOnUse">
+          <stop offset="0%" stopColor="#FFFFFF" />
+          <stop offset="100%" stopColor="#F8FAFC" />
+        </linearGradient>
+      </defs>
+
+      {/* Bible Base / Cover */}
+      <path 
+        d="M4 48 C13 44, 23 44, 32 47 C41 44, 51 44, 60 48 L60 59 C51 55, 41 55, 32 58 C23 55, 13 55, 4 59 Z" 
+        fill="url(#svgBibleCover)" 
+        stroke="#1E1B4B" 
+        strokeWidth="1.2" 
+        strokeLinejoin="round"
+      />
+
+      {/* Left Page */}
+      <path 
+        d="M6 46.5 C14 42.8, 23 42.8, 32 46 L32 56.5 C23 53.5, 14 53.5, 6 57 Z" 
+        fill="url(#svgPageGrad)" 
+        stroke="#CBD5E1" 
+        strokeWidth="0.8" 
+        strokeLinejoin="round"
+      />
+      {/* Right Page */}
+      <path 
+        d="M58 46.5 C50 42.8, 41 42.8, 32 46 L32 56.5 C41 53.5, 50 53.5, 58 57 Z" 
+        fill="url(#svgPageGrad)" 
+        stroke="#CBD5E1" 
+        strokeWidth="0.8" 
+        strokeLinejoin="round"
+      />
+
+      {/* Scripture text lines on pages */}
+      <line x1="11" y1="48" x2="27" y2="49" stroke="#94A3B8" strokeWidth="1.2" strokeLinecap="round" opacity="0.8" />
+      <line x1="11" y1="51.5" x2="27" y2="52.5" stroke="#94A3B8" strokeWidth="1.2" strokeLinecap="round" opacity="0.8" />
+      <line x1="37" y1="49" x2="53" y2="48" stroke="#94A3B8" strokeWidth="1.2" strokeLinecap="round" opacity="0.8" />
+      <line x1="37" y1="52.5" x2="53" y2="51.5" stroke="#94A3B8" strokeWidth="1.2" strokeLinecap="round" opacity="0.8" />
+
+      {/* Center ribbon bookmark */}
+      <path d="M31.2 46 L31.2 59.5 L32 58.5 L32.8 59.5 L32.8 46 Z" fill="#DC2626" />
+
+      {/* Outer Holy Fire / Flame */}
+      <path 
+        d="M32 4 C34.5 10.5, 42 14.5, 43.5 22.5 C45 30, 39.5 36.5, 35.5 40.5 C33.5 42, 30.5 42, 28.5 40.5 C24.5 36.5, 19 30, 20.5 22.5 C22 14.5, 29.5 10.5, 32 4 Z" 
+        fill="url(#svgFlameGrad)" 
+      />
+
+      {/* Inner Spark Flame */}
+      <path 
+        d="M32 14 C33.8 18.5, 38 21.5, 37.5 27.5 C37 32.5, 34.5 36, 32 37.5 C29.5 36, 27 32.5, 26.5 27.5 C26 21.5, 30.2 18.5, 32 14 Z" 
+        fill="url(#svgInnerFlameGrad)" 
+      />
+
+      {/* Core White Hot Hearth */}
+      <ellipse cx="32" cy="30" rx="2.5" ry="4.5" fill="#FFFFFF" opacity="0.9" />
+    </svg>
+  );
+};

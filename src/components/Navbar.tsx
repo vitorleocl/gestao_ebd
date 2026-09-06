@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
 import { 
-  BookOpen, 
   DollarSign, 
   BookMarked, 
   Users, 
@@ -10,6 +9,7 @@ import {
   ShieldCheck,
   TrendingUp
 } from 'lucide-react';
+import { BibleFlameIcon } from './BibleFlameIcon';
 import { useAuth } from '../context/AuthContext';
 import { getRoleBadge } from '../utils/formatters';
 
@@ -71,8 +71,8 @@ export const Navbar: React.FC<NavbarProps> = ({
           
           {/* Logo / Brand */}
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-indigo-600 to-indigo-800 flex items-center justify-center text-white shadow-sm shadow-indigo-200">
-              <BookOpen className="w-5 h-5" />
+            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-indigo-950 via-slate-900 to-indigo-900 flex items-center justify-center p-1.5 shadow-sm shadow-indigo-200/50 border border-indigo-700/40">
+              <BibleFlameIcon className="w-7 h-7" />
             </div>
             <div>
               <div className="flex items-center gap-2">
