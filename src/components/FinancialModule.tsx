@@ -92,6 +92,7 @@ export const FinancialModule: React.FC<FinancialModuleProps> = ({
   const [uploadProgress, setUploadProgress] = useState<number>(0);
   const [autoApprove, setAutoApprove] = useState<boolean>(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submittingStatusText, setSubmittingStatusText] = useState<string>('');
   const [formError, setFormError] = useState<string | null>(null);
 
   // Live Camera state & refs
@@ -305,17 +306,23 @@ export const FinancialModule: React.FC<FinancialModuleProps> = ({
     }
 
     setIsSubmitting(true);
+    setSubmittingStatusText('Iniciando...');
     try {
       let receiptUrl: string | undefined = undefined;
       let receiptName: string | undefined = undefined;
 
       if (formFile) {
-        const uploadResult = await uploadReceiptImage(formFile, (prog) => {
-          setUploadProgress(prog);
-        });
+        setSubmittingStatusText('Otimizando imagem...');
+        const uploadResult = await uploadReceiptImage(
+          formFile,
+          (prog) => setUploadProgress(prog),
+          (status) => setSubmittingStatusText(status)
+        );
         receiptUrl = uploadResult.downloadUrl;
         receiptName = uploadResult.fileName;
       }
+
+      setSubmittingStatusText('Gravando no banco...');
 
       // Permissions rule: Tesouraria always creates 'pending', Master/Dirigente can auto-approve
       const canDirectApprove = isMaster || isDirigente;
@@ -1163,8 +1170,8 @@ export const FinancialModule: React.FC<FinancialModuleProps> = ({
                   disabled={isSubmitting}
                   className="px-5 py-2 text-xs font-bold bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl shadow-xs transition-colors disabled:opacity-60 flex items-center gap-2 cursor-pointer"
                 >
-                  {isSubmitting && <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />}
-                  <span>Salvar Lançamento</span>
+                  {isSubmitting && <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin shrink-0" />}
+                  <span>{isSubmitting ? (submittingStatusText || 'Salvando...') : 'Salvar Lançamento'}</span>
                 </button>
               </div>
 
