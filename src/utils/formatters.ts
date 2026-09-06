@@ -8,9 +8,28 @@ export const formatCurrency = (val: number): string => {
   }).format(val || 0);
 };
 
+export const getTodayDateString = (d: Date = new Date()): string => {
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
+
 export const formatDate = (dateStr?: string): string => {
   if (!dateStr) return '-';
   try {
+    const trimmed = dateStr.trim();
+    
+    // If it is a calendar date in YYYY-MM-DD format (or starts with YYYY-MM-DD with midnight time)
+    // Avoid JavaScript UTC-midnight timezone shift bug that subtracts a day in negative timezones
+    if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed) || /^\d{4}-\d{2}-\d{2}T00:00/.test(trimmed)) {
+      const parts = trimmed.slice(0, 10).split('-');
+      if (parts.length === 3) {
+        const [year, month, day] = parts;
+        return `${day}/${month}/${year}`;
+      }
+    }
+
     const d = new Date(dateStr);
     if (isNaN(d.getTime())) return dateStr;
     return new Intl.DateTimeFormat('pt-BR', {

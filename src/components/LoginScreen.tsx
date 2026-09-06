@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Shield, CheckCircle2, AlertCircle } from 'lucide-react';
+import { AlertCircle } from 'lucide-react';
 import { BibleFlameIcon } from './BibleFlameIcon';
 import { useAuth } from '../context/AuthContext';
 
@@ -88,37 +88,6 @@ export const LoginScreen: React.FC = () => {
             )}
             <span className="text-sm">Entrar com o Google</span>
           </button>
-
-          {/* Profiles Information */}
-          <div className="pt-4 border-t border-slate-100 space-y-2.5">
-            <div className="flex items-center gap-1.5 text-xs font-semibold text-slate-700">
-              <Shield className="w-3.5 h-3.5 text-indigo-600" />
-              <span>Perfis de Acesso ao Sistema</span>
-            </div>
-
-            <div className="grid grid-cols-2 gap-2 text-[11px]">
-              <div className="p-2 rounded-lg bg-slate-50 border border-slate-100">
-                <span className="font-bold text-indigo-700 block">MASTER</span>
-                <span className="text-slate-500">Gestão global e usuários</span>
-              </div>
-              <div className="p-2 rounded-lg bg-slate-50 border border-slate-100">
-                <span className="font-bold text-amber-700 block">DIRIGENTE</span>
-                <span className="text-slate-500">Validação e aprovações</span>
-              </div>
-              <div className="p-2 rounded-lg bg-slate-50 border border-slate-100">
-                <span className="font-bold text-emerald-700 block">SECRETARIA</span>
-                <span className="text-slate-500">Controle e pedidos de lições</span>
-              </div>
-              <div className="p-2 rounded-lg bg-slate-50 border border-slate-100">
-                <span className="font-bold text-blue-700 block">TESOURARIA</span>
-                <span className="text-slate-500">Lançamentos de caixa</span>
-              </div>
-            </div>
-
-            <p className="text-[11px] text-slate-400 text-center pt-2">
-              Novos cadastros passam por aprovação de perfil pelo administrador Master.
-            </p>
-          </div>
         </div>
 
       </div>

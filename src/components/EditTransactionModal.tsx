@@ -28,6 +28,7 @@ import {
 import { INCOME_CATEGORIES, EXPENSE_CATEGORIES } from './FinancialModule';
 import { uploadReceiptImage } from '../utils/storage';
 import { DigitalSignaturePad } from './DigitalSignaturePad';
+import { getTodayDateString } from '../utils/formatters';
 
 interface EditTransactionModalProps {
   isOpen: boolean;
@@ -82,7 +83,7 @@ export const EditTransactionModal: React.FC<EditTransactionModalProps> = ({
         (transaction.type === 'income' ? INCOME_CATEGORIES[0] : EXPENSE_CATEGORIES[0])
       );
       setFormAmount(transaction.amount.toString());
-      setFormDate(transaction.date || new Date().toISOString().split('T')[0]);
+      setFormDate(transaction.date || getTodayDateString());
       setFormDescription(transaction.description || '');
 
       setFormFile(null);

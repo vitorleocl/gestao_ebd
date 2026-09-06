@@ -39,7 +39,7 @@ import {
   TransactionType, 
   TransactionStatus 
 } from '../types';
-import { formatCurrency, formatDate, getAccountName, getStatusBadge } from '../utils/formatters';
+import { formatCurrency, formatDate, getAccountName, getStatusBadge, getTodayDateString } from '../utils/formatters';
 import { uploadReceiptImage } from '../utils/storage';
 import { ReceiptModal } from './ReceiptModal';
 import { DigitalSignaturePad } from './DigitalSignaturePad';
@@ -89,7 +89,7 @@ export const FinancialModule: React.FC<FinancialModuleProps> = ({
   const [formAccount, setFormAccount] = useState<AccountType>('caixa_5');
   const [formCategory, setFormCategory] = useState<string>(INCOME_CATEGORIES[0]);
   const [formAmount, setFormAmount] = useState<string>('');
-  const [formDate, setFormDate] = useState<string>(new Date().toISOString().split('T')[0]);
+  const [formDate, setFormDate] = useState<string>(getTodayDateString());
   const [formDescription, setFormDescription] = useState<string>('');
   const [formFile, setFormFile] = useState<File | null>(null);
   const [filePreview, setFilePreview] = useState<string | null>(null);
