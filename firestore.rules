@@ -132,6 +132,20 @@ service cloud.firestore {
       allow delete: if isSignedIn() && isDirigenteOrMaster() && isValidId(transactionId);
     }
 
+    function isValidClass(data) {
+      return data.keys().hasAll(['name', 'createdAt', 'createdByUid']) &&
+             data.name is string && data.name.size() > 0 && data.name.size() <= 128 &&
+             data.createdByUid is string && data.createdByUid.size() <= 128;
+    }
+
+    // Classes collection
+    match /ebdClasses/{classId} {
+      allow get, list: if isSignedIn() && isApprovedUser();
+      allow create: if isSignedIn() && isSecretariaOrMaster() && isValidId(classId) && isValidClass(incoming()) && incoming().createdByUid == request.auth.uid;
+      allow update: if isSignedIn() && isSecretariaOrMaster() && isValidId(classId) && isValidClass(incoming());
+      allow delete: if isSignedIn() && isSecretariaOrMaster() && isValidId(classId);
+    }
+
     // Lesson Orders collection
     match /lessonOrders/{orderId} {
       allow get, list: if isSignedIn() && isApprovedUser();
@@ -141,7 +155,7 @@ service cloud.firestore {
 
       allow update: if isSignedIn() && isSecretariaOrMaster() && isValidId(orderId) && isValidLessonOrder(incoming());
 
-      allow delete: if isSignedIn() && isDirigenteOrMaster() && isValidId(orderId);
+      allow delete: if isSignedIn() && isSecretariaOrMaster() && isValidId(orderId);
     }
   }
 }

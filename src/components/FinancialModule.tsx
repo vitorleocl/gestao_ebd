@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { 
   PlusCircle, 
   Search, 
@@ -16,7 +16,9 @@ import {
   TrendingDown,
   Wallet,
   Calendar,
-  Layers
+  Layers,
+  Camera,
+  Tag
 } from 'lucide-react';
 import { 
   collection, 
@@ -36,6 +38,22 @@ import {
 import { formatCurrency, formatDate, getAccountName, getStatusBadge } from '../utils/formatters';
 import { uploadReceiptImage } from '../utils/storage';
 import { ReceiptModal } from './ReceiptModal';
+
+export const INCOME_CATEGORIES = [
+  'Cota 5% Igreja',
+  'Doações Especiais',
+  'Sorteios/Rifas'
+];
+
+export const EXPENSE_CATEGORIES = [
+  'Compra de Revistas/Lições',
+  'Material Didático/Papelaria',
+  'Alimentação/Lanche',
+  'Festividades/Eventos',
+  'Brindes e Premiações de Alunos',
+  'Manutenção/Decoração de Salas',
+  'Passagem/Despesas'
+];
 
 interface FinancialModuleProps {
   transactions: FinancialTransaction[];
@@ -60,6 +78,7 @@ export const FinancialModule: React.FC<FinancialModuleProps> = ({
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [formType, setFormType] = useState<TransactionType>('income');
   const [formAccount, setFormAccount] = useState<AccountType>('caixa_5');
+  const [formCategory, setFormCategory] = useState<string>(INCOME_CATEGORIES[0]);
   const [formAmount, setFormAmount] = useState<string>('');
   const [formDate, setFormDate] = useState<string>(new Date().toISOString().split('T')[0]);
   const [formDescription, setFormDescription] = useState<string>('');
@@ -69,6 +88,13 @@ export const FinancialModule: React.FC<FinancialModuleProps> = ({
   const [autoApprove, setAutoApprove] = useState<boolean>(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
+
+  // Live Camera state & refs
+  const [isCameraOpen, setIsCameraOpen] = useState(false);
+  const [cameraError, setCameraError] = useState<string | null>(null);
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+  const streamRef = useRef<MediaStream | null>(null);
+  const directCameraInputRef = useRef<HTMLInputElement | null>(null);
 
   // Receipt Modal View
   const [viewReceipt, setViewReceipt] = useState<{ url: string; title: string; description?: string } | null>(null);
@@ -162,6 +188,76 @@ export const FinancialModule: React.FC<FinancialModuleProps> = ({
     };
   }, [transactions]);
 
+  // Clean up camera stream if unmounting or modal closing
+  useEffect(() => {
+    return () => {
+      if (streamRef.current) {
+        streamRef.current.getTracks().forEach(track => track.stop());
+      }
+    };
+  }, []);
+
+  const handleSelectType = (type: TransactionType) => {
+    setFormType(type);
+    if (type === 'income') {
+      setFormCategory(INCOME_CATEGORIES[0]);
+    } else {
+      setFormCategory(EXPENSE_CATEGORIES[0]);
+    }
+  };
+
+  // Live Camera Controls
+  const startCamera = async () => {
+    setCameraError(null);
+    setIsCameraOpen(true);
+    try {
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        throw new Error('Navegador sem suporte a câmera direta.');
+      }
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: { ideal: 'environment' } },
+        audio: false
+      });
+      streamRef.current = stream;
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+        videoRef.current.play();
+      }
+    } catch (err: any) {
+      console.warn("Camera live stream error:", err);
+      setCameraError('Não foi possível iniciar o visor da câmera diretamente neste navegador. Clique abaixo para tirar a foto usando a câmera nativa do seu aparelho.');
+    }
+  };
+
+  const stopCamera = () => {
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach(track => track.stop());
+      streamRef.current = null;
+    }
+    setIsCameraOpen(false);
+    setCameraError(null);
+  };
+
+  const capturePhoto = () => {
+    if (!videoRef.current) return;
+    const video = videoRef.current;
+    const canvas = document.createElement('canvas');
+    canvas.width = video.videoWidth || 640;
+    canvas.height = video.videoHeight || 480;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+    canvas.toBlob((blob) => {
+      if (blob) {
+        const capturedFile = new File([blob], `comprovante_${Date.now()}.jpg`, { type: 'image/jpeg' });
+        setFormFile(capturedFile);
+        setFilePreview(canvas.toDataURL('image/jpeg'));
+      }
+      stopCamera();
+    }, 'image/jpeg', 0.85);
+  };
+
   // Handle image file selection
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
@@ -221,6 +317,7 @@ export const FinancialModule: React.FC<FinancialModuleProps> = ({
       const payload = {
         type: formType,
         account: formAccount,
+        category: formCategory || (formType === 'income' ? INCOME_CATEGORIES[0] : EXPENSE_CATEGORIES[0]),
         amount: amountNum,
         date: formDate,
         description: formDescription.trim(),
@@ -245,6 +342,7 @@ export const FinancialModule: React.FC<FinancialModuleProps> = ({
       setFormDescription('');
       setFormFile(null);
       setFilePreview(null);
+      setFormCategory(INCOME_CATEGORIES[0]);
       setUploadProgress(0);
       setIsModalOpen(false);
 
@@ -643,6 +741,14 @@ export const FinancialModule: React.FC<FinancialModuleProps> = ({
                           {getAccountName(t.account)}
                         </span>
 
+                        {/* Category Badge */}
+                        {t.category && (
+                          <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-slate-100 text-slate-700 border border-slate-200 flex items-center gap-1">
+                            <Tag className="w-2.5 h-2.5 text-slate-400" />
+                            <span>{t.category}</span>
+                          </span>
+                        )}
+
                         {/* Status Badge */}
                         <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${statusBadge.bg} ${statusBadge.color} ${statusBadge.border}`}>
                           {statusBadge.label}
@@ -764,7 +870,7 @@ export const FinancialModule: React.FC<FinancialModuleProps> = ({
                 <div className="grid grid-cols-2 gap-2">
                   <button
                     type="button"
-                    onClick={() => setFormType('income')}
+                    onClick={() => handleSelectType('income')}
                     className={`py-2.5 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-2 border transition-all cursor-pointer ${
                       formType === 'income'
                         ? 'bg-emerald-50 border-emerald-500 text-emerald-700 ring-2 ring-emerald-500/20 shadow-xs'
@@ -777,7 +883,7 @@ export const FinancialModule: React.FC<FinancialModuleProps> = ({
 
                   <button
                     type="button"
-                    onClick={() => setFormType('expense')}
+                    onClick={() => handleSelectType('expense')}
                     className={`py-2.5 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-2 border transition-all cursor-pointer ${
                       formType === 'expense'
                         ? 'bg-rose-50 border-rose-500 text-rose-700 ring-2 ring-rose-500/20 shadow-xs'
@@ -788,6 +894,25 @@ export const FinancialModule: React.FC<FinancialModuleProps> = ({
                     <span>Saída (Despesa)</span>
                   </button>
                 </div>
+              </div>
+
+              {/* Categoria do Lançamento */}
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  Categoria *
+                </label>
+                <select
+                  value={formCategory}
+                  onChange={(e) => setFormCategory(e.target.value)}
+                  className="w-full px-3 py-2 text-xs font-semibold bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white cursor-pointer"
+                >
+                  {(formType === 'income' ? INCOME_CATEGORIES : EXPENSE_CATEGORIES).map(cat => (
+                    <option key={cat} value={cat}>{cat}</option>
+                  ))}
+                </select>
+                <span className="text-[10px] text-slate-400 mt-0.5 block">
+                  {formType === 'income' ? 'Categorias oficiais de entrada' : 'Categorias oficiais de saída'}
+                </span>
               </div>
 
               {/* Account Selection */}
@@ -883,31 +1008,62 @@ export const FinancialModule: React.FC<FinancialModuleProps> = ({
                 {filePreview ? (
                   <div className="relative p-2.5 border border-slate-200 rounded-xl bg-slate-50 flex items-center justify-between">
                     <div className="flex items-center gap-2.5 overflow-hidden">
-                      <img src={filePreview} alt="Preview" className="w-10 h-10 rounded-lg object-cover border border-slate-300" />
+                      <img src={filePreview} alt="Preview" className="w-12 h-12 rounded-lg object-cover border border-slate-300 shrink-0" />
                       <div className="truncate text-xs font-medium text-slate-700">
-                        {formFile?.name || 'Comprovante selecionado'}
+                        {formFile?.name || 'Comprovante capturado'}
                       </div>
                     </div>
                     <button
                       type="button"
                       onClick={removeSelectedFile}
-                      className="p-1.5 text-rose-600 hover:bg-rose-50 rounded-lg"
+                      className="p-1.5 text-rose-600 hover:bg-rose-50 rounded-lg cursor-pointer"
+                      title="Remover comprovante"
                     >
                       <X className="w-4 h-4" />
                     </button>
                   </div>
                 ) : (
-                  <label className="border-2 border-dashed border-slate-200 hover:border-indigo-400 rounded-xl p-4 flex flex-col items-center justify-center gap-1.5 cursor-pointer bg-slate-50 hover:bg-indigo-50/20 transition-all text-center">
-                    <UploadCloud className="w-6 h-6 text-slate-400" />
-                    <span className="text-xs font-semibold text-slate-700">Clique para selecionar imagem</span>
-                    <span className="text-[10px] text-slate-400">JPG, PNG ou foto da câmera</span>
+                  <div className="space-y-2">
+                    <div className="grid grid-cols-2 gap-2">
+                      {/* Botão Tirar Foto Agora */}
+                      <button
+                        type="button"
+                        onClick={startCamera}
+                        className="p-3 border-2 border-dashed border-indigo-200 hover:border-indigo-500 rounded-xl flex flex-col items-center justify-center gap-1.5 bg-indigo-50/40 hover:bg-indigo-50 transition-all cursor-pointer text-indigo-950"
+                      >
+                        <div className="w-8 h-8 rounded-lg bg-indigo-100 text-indigo-600 flex items-center justify-center">
+                          <Camera className="w-4 h-4" />
+                        </div>
+                        <span className="text-xs font-bold text-indigo-900">Tirar Foto Agora</span>
+                        <span className="text-[10px] text-indigo-500 text-center">Usar câmera do aparelho</span>
+                      </button>
+
+                      {/* Botão Selecionar Arquivo */}
+                      <label className="p-3 border-2 border-dashed border-slate-200 hover:border-slate-400 rounded-xl flex flex-col items-center justify-center gap-1.5 bg-slate-50 hover:bg-slate-100 transition-all cursor-pointer text-slate-700">
+                        <div className="w-8 h-8 rounded-lg bg-slate-200/70 text-slate-600 flex items-center justify-center">
+                          <UploadCloud className="w-4 h-4" />
+                        </div>
+                        <span className="text-xs font-bold text-slate-800">Escolher Arquivo</span>
+                        <span className="text-[10px] text-slate-400 text-center">Galeria ou documento</span>
+                        <input
+                          type="file"
+                          accept="image/*"
+                          onChange={handleFileChange}
+                          className="hidden"
+                        />
+                      </label>
+                    </div>
+
+                    {/* Fallback direto de câmera mobile */}
                     <input
+                      ref={directCameraInputRef}
                       type="file"
                       accept="image/*"
+                      capture="environment"
                       onChange={handleFileChange}
                       className="hidden"
                     />
-                  </label>
+                  </div>
                 )}
 
                 {uploadProgress > 0 && uploadProgress < 100 && (
@@ -980,6 +1136,79 @@ export const FinancialModule: React.FC<FinancialModuleProps> = ({
         title={viewReceipt?.title}
         description={viewReceipt?.description}
       />
+
+      {/* LIVE CAMERA CAPTURE MODAL */}
+      {isCameraOpen && (
+        <div className="fixed inset-0 z-60 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in">
+          <div className="bg-slate-900 border border-slate-700 rounded-2xl overflow-hidden max-w-md w-full text-white shadow-2xl space-y-3 p-4">
+            <div className="flex items-center justify-between pb-2 border-b border-slate-800">
+              <div className="flex items-center gap-2 font-bold text-sm text-slate-200">
+                <Camera className="w-4 h-4 text-indigo-400" />
+                <span>Fotografar Comprovante / Recibo</span>
+              </div>
+              <button 
+                type="button"
+                onClick={stopCamera}
+                className="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {cameraError ? (
+              <div className="p-4 bg-slate-800/80 border border-slate-700 rounded-xl text-xs text-slate-300 space-y-3 text-center">
+                <p>{cameraError}</p>
+                <button
+                  type="button"
+                  onClick={() => {
+                    stopCamera();
+                    directCameraInputRef.current?.click();
+                  }}
+                  className="px-4 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-xl text-xs cursor-pointer shadow-sm inline-flex items-center gap-2"
+                >
+                  <Camera className="w-4 h-4" />
+                  <span>Abrir Câmera do Sistema</span>
+                </button>
+              </div>
+            ) : (
+              <div className="relative rounded-xl overflow-hidden bg-black aspect-[4/3] flex items-center justify-center border border-slate-800">
+                <video
+                  ref={videoRef}
+                  autoPlay
+                  playsInline
+                  muted
+                  className="w-full h-full object-cover"
+                />
+                <div className="absolute inset-4 border-2 border-dashed border-white/40 pointer-events-none rounded-lg flex items-center justify-center">
+                  <span className="text-[11px] font-semibold text-white/80 bg-black/50 px-2.5 py-1 rounded-full backdrop-blur-xs">
+                    Posicione o recibo aqui
+                  </span>
+                </div>
+              </div>
+            )}
+
+            <div className="flex items-center justify-between gap-3 pt-2">
+              <button
+                type="button"
+                onClick={stopCamera}
+                className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-400 hover:text-white hover:bg-slate-800 cursor-pointer"
+              >
+                Cancelar
+              </button>
+              {!cameraError && (
+                <button
+                  type="button"
+                  onClick={capturePhoto}
+                  className="px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs flex items-center gap-2 shadow-lg shadow-indigo-600/30 cursor-pointer"
+                >
+                  <Camera className="w-4 h-4" />
+                  <span>Capturar Foto</span>
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
     </div>
   );

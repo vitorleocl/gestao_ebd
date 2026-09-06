@@ -14,7 +14,7 @@ import { Dashboard } from './components/Dashboard';
 import { FinancialModule } from './components/FinancialModule';
 import { LessonsModule } from './components/LessonsModule';
 import { UsersManagementModule } from './components/UsersManagementModule';
-import { FinancialTransaction, LessonOrder } from './types';
+import { FinancialTransaction, LessonOrder, EbdClass } from './types';
 import { BookOpen, WifiOff } from 'lucide-react';
 
 const MainLayout: React.FC = () => {
@@ -25,6 +25,8 @@ const MainLayout: React.FC = () => {
   const [loadingTransactions, setLoadingTransactions] = useState(true);
   const [lessonOrders, setLessonOrders] = useState<LessonOrder[]>([]);
   const [loadingOrders, setLoadingOrders] = useState(true);
+  const [classes, setClasses] = useState<EbdClass[]>([]);
+  const [loadingClasses, setLoadingClasses] = useState(true);
   const [isOffline, setIsOffline] = useState(!navigator.onLine);
 
   // Monitor online/offline status for church users with variable connectivity
@@ -90,9 +92,30 @@ const MainLayout: React.FC = () => {
       }
     );
 
+    // 3. EBD Classes listener
+    const classesQuery = query(collection(db, 'ebdClasses'));
+    const unsubscribeClasses = onSnapshot(
+      classesQuery,
+      (snapshot) => {
+        const list: EbdClass[] = [];
+        snapshot.forEach((docSnap) => {
+          list.push({ ...docSnap.data() as EbdClass, id: docSnap.id });
+        });
+        list.sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'));
+        setClasses(list);
+        setLoadingClasses(false);
+      },
+      (error) => {
+        console.error("Erro ao sincronizar classes:", error);
+        handleFirestoreError(error, OperationType.LIST, 'ebdClasses');
+        setLoadingClasses(false);
+      }
+    );
+
     return () => {
       unsubscribeTrans();
       unsubscribeOrders();
+      unsubscribeClasses();
     };
   }, [currentUser, isApproved]);
 
@@ -161,6 +184,8 @@ const MainLayout: React.FC = () => {
           <LessonsModule
             orders={lessonOrders}
             loading={loadingOrders}
+            classes={classes}
+            loadingClasses={loadingClasses}
           />
         )}
 

@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import { 
   TrendingUp, 
   ArrowDownRight, 
@@ -11,8 +11,19 @@ import {
   FileText,
   ChevronRight,
   AlertTriangle,
-  Wallet
+  Wallet,
+  BarChart3
 } from 'lucide-react';
+import { 
+  BarChart, 
+  Bar, 
+  XAxis, 
+  YAxis, 
+  CartesianGrid, 
+  Tooltip, 
+  Legend, 
+  ResponsiveContainer 
+} from 'recharts';
 import { useAuth } from '../context/AuthContext';
 import { FinancialTransaction, LessonOrder } from '../types';
 import { formatCurrency, formatDate, getAccountName, getStatusBadge } from '../utils/formatters';
@@ -103,6 +114,92 @@ export const Dashboard: React.FC<DashboardProps> = ({
     return [...transactions]
       .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
       .slice(0, 5);
+  }, [transactions]);
+
+  // Chart account view filter
+  const [chartAccountView, setChartAccountView] = useState<'both' | 'caixa_5' | 'caixa_licoes'>('both');
+
+  // Monthly aggregated data for Recharts Bar Chart
+  const monthlyChartData = useMemo(() => {
+    const monthsMap = new Map<string, {
+      monthKey: string;
+      monthLabel: string;
+      caixa5Entradas: number;
+      caixa5Saidas: number;
+      licoesEntradas: number;
+      licoesSaidas: number;
+      totalEntradas: number;
+      totalSaidas: number;
+    }>();
+
+    // Default to the last 6 months minimum
+    const now = new Date();
+    for (let i = 5; i >= 0; i--) {
+      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      const y = d.getFullYear();
+      const m = String(d.getMonth() + 1).padStart(2, '0');
+      const key = `${y}-${m}`;
+      const rawMonth = d.toLocaleDateString('pt-BR', { month: 'short' }).replace('.', '');
+      const monthLabel = `${rawMonth.charAt(0).toUpperCase() + rawMonth.slice(1)}/${String(y).slice(2)}`;
+      monthsMap.set(key, {
+        monthKey: key,
+        monthLabel,
+        caixa5Entradas: 0,
+        caixa5Saidas: 0,
+        licoesEntradas: 0,
+        licoesSaidas: 0,
+        totalEntradas: 0,
+        totalSaidas: 0,
+      });
+    }
+
+    // Populate with approved transactions
+    transactions.forEach(t => {
+      if (t.status !== 'approved') return;
+      const dateStr = t.date || '';
+      if (dateStr.length < 7) return;
+      const key = dateStr.slice(0, 7);
+
+      if (!monthsMap.has(key)) {
+        const [yStr, mStr] = key.split('-');
+        const y = parseInt(yStr, 10);
+        const m = parseInt(mStr, 10);
+        const d = new Date(y, m - 1, 1);
+        const rawMonth = d.toLocaleDateString('pt-BR', { month: 'short' }).replace('.', '');
+        const monthLabel = `${rawMonth.charAt(0).toUpperCase() + rawMonth.slice(1)}/${String(y).slice(2)}`;
+        monthsMap.set(key, {
+          monthKey: key,
+          monthLabel,
+          caixa5Entradas: 0,
+          caixa5Saidas: 0,
+          licoesEntradas: 0,
+          licoesSaidas: 0,
+          totalEntradas: 0,
+          totalSaidas: 0,
+        });
+      }
+
+      const item = monthsMap.get(key)!;
+      if (t.account === 'caixa_5') {
+        if (t.type === 'income') {
+          item.caixa5Entradas += t.amount;
+          item.totalEntradas += t.amount;
+        } else {
+          item.caixa5Saidas += t.amount;
+          item.totalSaidas += t.amount;
+        }
+      } else if (t.account === 'caixa_licoes') {
+        if (t.type === 'income') {
+          item.licoesEntradas += t.amount;
+          item.totalEntradas += t.amount;
+        } else {
+          item.licoesSaidas += t.amount;
+          item.totalSaidas += t.amount;
+        }
+      }
+    });
+
+    return Array.from(monthsMap.values()).sort((a, b) => a.monthKey.localeCompare(b.monthKey));
   }, [transactions]);
 
   return (
@@ -266,7 +363,138 @@ export const Dashboard: React.FC<DashboardProps> = ({
 
       </div>
 
-      {/* Indicadores Rápidos de Lições EBD */}
+      {/* Gráfico de Barras Mensal dos Dois Caixas (Recharts) */}
+      <div className="bg-white rounded-2xl p-5 border border-slate-200 shadow-xs space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div>
+            <div className="flex items-center gap-2">
+              <BarChart3 className="w-5 h-5 text-indigo-600" />
+              <h3 className="text-sm font-bold text-slate-900">
+                Movimentação Mensal: Entradas e Saídas dos Caixas
+              </h3>
+            </div>
+            <p className="text-xs text-slate-500 mt-0.5">
+              Comparativo mês a mês do Caixa 5% e do Caixa de Lições
+            </p>
+          </div>
+
+          {/* Filter view pills */}
+          <div className="flex items-center gap-1.5 self-start sm:self-auto bg-slate-100 p-1 rounded-xl">
+            <button
+              onClick={() => setChartAccountView('both')}
+              className={`px-3 py-1 text-xs font-bold rounded-lg transition-all cursor-pointer ${
+                chartAccountView === 'both'
+                  ? 'bg-white text-slate-900 shadow-xs'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              Ambos os Caixas
+            </button>
+            <button
+              onClick={() => setChartAccountView('caixa_5')}
+              className={`px-3 py-1 text-xs font-bold rounded-lg transition-all cursor-pointer ${
+                chartAccountView === 'caixa_5'
+                  ? 'bg-indigo-600 text-white shadow-xs'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              Caixa 5%
+            </button>
+            <button
+              onClick={() => setChartAccountView('caixa_licoes')}
+              className={`px-3 py-1 text-xs font-bold rounded-lg transition-all cursor-pointer ${
+                chartAccountView === 'caixa_licoes'
+                  ? 'bg-emerald-600 text-white shadow-xs'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              Caixa de Lições
+            </button>
+          </div>
+        </div>
+
+        {/* Chart View Container */}
+        <div className="w-full h-72 pt-2">
+          <ResponsiveContainer width="100%" height="100%">
+            <BarChart
+              data={monthlyChartData}
+              margin={{ top: 10, right: 10, left: -10, bottom: 0 }}
+              barGap={4}
+              barCategoryGap="25%"
+            >
+              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+              <XAxis 
+                dataKey="monthLabel" 
+                tick={{ fill: '#64748b', fontSize: 11 }}
+                axisLine={{ stroke: '#e2e8f0' }}
+                tickLine={false}
+              />
+              <YAxis 
+                tick={{ fill: '#64748b', fontSize: 11 }}
+                axisLine={false}
+                tickLine={false}
+                tickFormatter={(val) => `R$${val}`}
+              />
+              <Tooltip 
+                content={({ active, payload, label }) => {
+                  if (!active || !payload || !payload.length) return null;
+                  return (
+                    <div className="bg-slate-900 text-white p-3 rounded-xl shadow-xl text-xs border border-slate-700 min-w-[200px] space-y-2">
+                      <div className="font-bold border-b border-slate-700 pb-1 text-indigo-200">
+                        {label}
+                      </div>
+                      <div className="space-y-1">
+                        {payload.map((entry, index) => (
+                          <div key={`item-${index}`} className="flex items-center justify-between gap-3">
+                            <span className="flex items-center gap-1.5 text-slate-300">
+                              <span 
+                                className="w-2.5 h-2.5 rounded-full inline-block" 
+                                style={{ backgroundColor: entry.color }} 
+                              />
+                              <span>{entry.name}:</span>
+                            </span>
+                            <span className="font-bold text-white">
+                              {formatCurrency(Number(entry.value) || 0)}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                }} 
+              />
+              <Legend 
+                wrapperStyle={{ fontSize: '11px', paddingTop: '10px' }}
+                iconType="circle"
+                iconSize={8}
+              />
+
+              {chartAccountView === 'both' && (
+                <>
+                  <Bar dataKey="caixa5Entradas" name="5%: Entradas" fill="#6366f1" radius={[4, 4, 0, 0]} maxBarSize={28} />
+                  <Bar dataKey="caixa5Saidas" name="5%: Saídas" fill="#f43f5e" radius={[4, 4, 0, 0]} maxBarSize={28} />
+                  <Bar dataKey="licoesEntradas" name="Lições: Entradas" fill="#10b981" radius={[4, 4, 0, 0]} maxBarSize={28} />
+                  <Bar dataKey="licoesSaidas" name="Lições: Saídas" fill="#f59e0b" radius={[4, 4, 0, 0]} maxBarSize={28} />
+                </>
+              )}
+
+              {chartAccountView === 'caixa_5' && (
+                <>
+                  <Bar dataKey="caixa5Entradas" name="Entradas (Caixa 5%)" fill="#4f46e5" radius={[4, 4, 0, 0]} maxBarSize={36} />
+                  <Bar dataKey="caixa5Saidas" name="Saídas (Caixa 5%)" fill="#e11d48" radius={[4, 4, 0, 0]} maxBarSize={36} />
+                </>
+              )}
+
+              {chartAccountView === 'caixa_licoes' && (
+                <>
+                  <Bar dataKey="licoesEntradas" name="Entradas (Caixa de Lições)" fill="#059669" radius={[4, 4, 0, 0]} maxBarSize={36} />
+                  <Bar dataKey="licoesSaidas" name="Saídas (Caixa de Lições)" fill="#d97706" radius={[4, 4, 0, 0]} maxBarSize={36} />
+                </>
+              )}
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+      </div>
       <div className="bg-white rounded-2xl p-5 border border-slate-200 shadow-xs space-y-4">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">

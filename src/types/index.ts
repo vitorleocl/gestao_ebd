@@ -18,6 +18,7 @@ export interface FinancialTransaction {
   id: string;
   type: TransactionType;
   account: AccountType;
+  category?: string;
   amount: number;
   date: string;
   description: string;
@@ -34,6 +35,15 @@ export interface FinancialTransaction {
   lessonOrderId?: string;
 }
 
+export interface EbdClass {
+  id: string;
+  name: string;
+  createdAt: string;
+  createdByUid: string;
+  createdByName?: string;
+  updatedAt?: string;
+}
+
 export type LessonType = 'Adulto' | 'Aluno' | 'Jovens' | 'Infantil' | 'Outro';
 export type PaymentStatus = 'pago' | 'nao_pago';
 export type DeliveryStatus = 'retirado' | 'nao_retirado';
@@ -42,6 +52,7 @@ export interface LessonOrder {
   id: string;
   lessonType: LessonType;
   className: string;
+  classId?: string;
   quantity: number;
   unitPrice?: number;
   totalAmount?: number;
