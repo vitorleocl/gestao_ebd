@@ -47,9 +47,22 @@ export interface EbdClass {
   updatedAt?: string;
 }
 
-export type LessonType = 'Adulto' | 'Aluno' | 'Jovens' | 'Infantil' | 'Outro';
+export type LessonType = 'Adulto' | 'Aluno' | string;
 export type PaymentStatus = 'pago' | 'nao_pago';
 export type DeliveryStatus = 'retirado' | 'nao_retirado';
+
+export interface LessonPurchase {
+  id: string;
+  quantity: number;          // Quantitativo comprado antecipadamente pela direção
+  purchaseDate: string;      // Data da compra (YYYY-MM-DD)
+  notes?: string;            // Observações / Trimestre / Detalhes
+  unitCost?: number;         // Custo unitário (opcional)
+  totalCost?: number;        // Custo total pago (opcional)
+  createdByUid: string;
+  createdByName: string;
+  createdAt: string;
+  updatedAt?: string;
+}
 
 export interface LessonOrder {
   id: string;

@@ -14,7 +14,7 @@ import { Dashboard } from './components/Dashboard';
 import { FinancialModule } from './components/FinancialModule';
 import { LessonsModule } from './components/LessonsModule';
 import { UsersManagementModule } from './components/UsersManagementModule';
-import { FinancialTransaction, LessonOrder, EbdClass } from './types';
+import { FinancialTransaction, LessonOrder, EbdClass, LessonPurchase } from './types';
 import { WifiOff } from 'lucide-react';
 import { BibleFlameIcon } from './components/BibleFlameIcon';
 
@@ -26,6 +26,8 @@ const MainLayout: React.FC = () => {
   const [loadingTransactions, setLoadingTransactions] = useState(true);
   const [lessonOrders, setLessonOrders] = useState<LessonOrder[]>([]);
   const [loadingOrders, setLoadingOrders] = useState(true);
+  const [purchases, setPurchases] = useState<LessonPurchase[]>([]);
+  const [loadingPurchases, setLoadingPurchases] = useState(true);
   const [classes, setClasses] = useState<EbdClass[]>([]);
   const [loadingClasses, setLoadingClasses] = useState(true);
   const [isOffline, setIsOffline] = useState(!navigator.onLine);
@@ -47,13 +49,16 @@ const MainLayout: React.FC = () => {
     if (!currentUser || !isApproved) {
       setTransactions([]);
       setLessonOrders([]);
+      setPurchases([]);
       setLoadingTransactions(false);
       setLoadingOrders(false);
+      setLoadingPurchases(false);
       return;
     }
 
     setLoadingTransactions(true);
     setLoadingOrders(true);
+    setLoadingPurchases(true);
 
     // 1. Transactions listener
     const transQuery = query(collection(db, 'transactions'));
@@ -93,7 +98,27 @@ const MainLayout: React.FC = () => {
       }
     );
 
-    // 3. EBD Classes listener
+    // 3. Lesson Purchases listener (Lições Compradas antecipadamente pela direção)
+    const purchasesQuery = query(collection(db, 'lessonPurchases'));
+    const unsubscribePurchases = onSnapshot(
+      purchasesQuery,
+      (snapshot) => {
+        const list: LessonPurchase[] = [];
+        snapshot.forEach((docSnap) => {
+          list.push({ ...docSnap.data() as LessonPurchase, id: docSnap.id });
+        });
+        list.sort((a, b) => new Date(b.purchaseDate || b.createdAt).getTime() - new Date(a.purchaseDate || a.createdAt).getTime());
+        setPurchases(list);
+        setLoadingPurchases(false);
+      },
+      (error) => {
+        console.error("Erro ao sincronizar compras de lições:", error);
+        handleFirestoreError(error, OperationType.LIST, 'lessonPurchases');
+        setLoadingPurchases(false);
+      }
+    );
+
+    // 4. EBD Classes listener
     const classesQuery = query(collection(db, 'ebdClasses'));
     const unsubscribeClasses = onSnapshot(
       classesQuery,
@@ -116,6 +141,7 @@ const MainLayout: React.FC = () => {
     return () => {
       unsubscribeTrans();
       unsubscribeOrders();
+      unsubscribePurchases();
       unsubscribeClasses();
     };
   }, [currentUser, isApproved]);
@@ -169,6 +195,7 @@ const MainLayout: React.FC = () => {
           <Dashboard
             transactions={transactions}
             orders={lessonOrders}
+            purchases={purchases}
             onNavigate={setCurrentTab}
             onOpenNewTransaction={() => setCurrentTab('financeiro')}
           />
@@ -187,6 +214,8 @@ const MainLayout: React.FC = () => {
             loading={loadingOrders}
             classes={classes}
             loadingClasses={loadingClasses}
+            purchases={purchases}
+            loadingPurchases={loadingPurchases}
           />
         )}
 
@@ -197,6 +226,7 @@ const MainLayout: React.FC = () => {
             <Dashboard
               transactions={transactions}
               orders={lessonOrders}
+              purchases={purchases}
               onNavigate={setCurrentTab}
               onOpenNewTransaction={() => setCurrentTab('financeiro')}
             />

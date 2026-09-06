@@ -1,5 +1,5 @@
 {
-  "name": "Gestão EBD",
+  "name": "Gestão EBD | IEADALPE JDPBX",
   "description": "Sistema de gestão da Escola Bíblica Dominical (EBD) com controle financeiro dos caixas 5% e Lições, controle de lições por classe e gestão de usuários com perfis.",
   "requestFramePermissions": ["camera"],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]

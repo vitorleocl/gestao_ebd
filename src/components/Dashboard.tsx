@@ -12,7 +12,9 @@ import {
   ChevronRight,
   AlertTriangle,
   Wallet,
-  BarChart3
+  BarChart3,
+  Boxes,
+  ShoppingBag
 } from 'lucide-react';
 import { 
   BarChart, 
@@ -25,12 +27,13 @@ import {
   ResponsiveContainer 
 } from 'recharts';
 import { useAuth } from '../context/AuthContext';
-import { FinancialTransaction, LessonOrder } from '../types';
+import { FinancialTransaction, LessonOrder, LessonPurchase } from '../types';
 import { formatCurrency, formatDate, getAccountName, getStatusBadge } from '../utils/formatters';
 
 interface DashboardProps {
   transactions: FinancialTransaction[];
   orders: LessonOrder[];
+  purchases?: LessonPurchase[];
   onNavigate: (tab: 'dashboard' | 'financeiro' | 'licoes' | 'usuarios') => void;
   onOpenNewTransaction: () => void;
 }
@@ -38,6 +41,7 @@ interface DashboardProps {
 export const Dashboard: React.FC<DashboardProps> = ({
   transactions,
   orders,
+  purchases = [],
   onNavigate,
   onOpenNewTransaction
 }) => {
@@ -85,7 +89,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
     };
   }, [transactions]);
 
-  // Lessons summary
+  // Lessons summary with stock tracking
   const lessonsSummary = useMemo(() => {
     let totalRequested = 0;
     let totalPaid = 0;
@@ -97,17 +101,22 @@ export const Dashboard: React.FC<DashboardProps> = ({
       if (o.deliveryStatus === 'retirado') totalDelivered += o.quantity;
     });
 
+    const totalPurchased = purchases.reduce((acc, p) => acc + (p.quantity || 0), 0);
+    // Subtrai conforme for sendo retirado dos pedidos (retirado fisicamente)
+    const stockRemaining = totalPurchased - totalDelivered;
     const pendingPayment = totalRequested - totalPaid;
     const pendingDelivery = totalRequested - totalDelivered;
 
     return {
+      totalPurchased,
+      stockRemaining,
       totalRequested,
       totalPaid,
       totalDelivered,
       pendingPayment,
       pendingDelivery
     };
-  }, [orders]);
+  }, [orders, purchases]);
 
   // Recent transactions (last 5)
   const recentTransactions = useMemo(() => {
@@ -499,43 +508,84 @@ export const Dashboard: React.FC<DashboardProps> = ({
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <BookMarked className="w-5 h-5 text-emerald-600" />
-            <h3 className="text-sm font-bold text-slate-900">Indicadores Rápidos de Lições EBD</h3>
+            <h3 className="text-sm font-bold text-slate-900">Estoque e Indicadores de Lições EBD</h3>
           </div>
           <button
             onClick={() => onNavigate('licoes')}
             className="text-xs font-bold text-emerald-600 hover:text-emerald-700 flex items-center gap-1 cursor-pointer"
           >
-            <span>Ver tabela consolidada</span>
+            <span>Gerenciar Lições EBD</span>
             <ChevronRight className="w-3.5 h-3.5" />
           </button>
         </div>
 
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-          <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-100">
-            <span className="text-[11px] font-bold text-slate-400 block uppercase">Total Pedidas</span>
-            <span className="text-xl font-extrabold text-slate-800">{lessonsSummary.totalRequested}</span>
-            <span className="text-[10px] text-slate-500 block mt-0.5">Revistas encomendadas</span>
-          </div>
-
-          <div className="p-3.5 rounded-xl bg-emerald-50/50 border border-emerald-100">
-            <span className="text-[11px] font-bold text-emerald-600 block uppercase">Lições Pagas</span>
-            <span className="text-xl font-extrabold text-emerald-700">{lessonsSummary.totalPaid}</span>
-            <span className="text-[10px] text-emerald-600 block mt-0.5">
-              {lessonsSummary.totalRequested > 0 ? `${Math.round((lessonsSummary.totalPaid / lessonsSummary.totalRequested) * 100)}% quitadas` : '0%'}
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+          {/* 1. Compradas Antecipadamente pela Direção */}
+          <div className="p-3.5 rounded-xl bg-indigo-50/70 border border-indigo-100 space-y-1">
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] font-bold text-indigo-700 block uppercase tracking-wider">Lições Compradas</span>
+              <ShoppingBag className="w-3.5 h-3.5 text-indigo-500" />
+            </div>
+            <div className="text-xl font-black text-indigo-950 tracking-tight">
+              {lessonsSummary.totalPurchased} <span className="text-xs font-semibold text-indigo-600">un</span>
+            </div>
+            <span className="text-[10px] text-indigo-700 block font-medium">
+              Compradas pela Direção
             </span>
           </div>
 
-          <div className="p-3.5 rounded-xl bg-amber-50/50 border border-amber-100">
-            <span className="text-[11px] font-bold text-amber-700 block uppercase">A Pagar</span>
-            <span className="text-xl font-extrabold text-amber-800">{lessonsSummary.pendingPayment}</span>
-            <span className="text-[10px] text-amber-700 block mt-0.5">Aguardando recebimento</span>
+          {/* 2. Saldo Disponível em Estoque (Subtraído conforme retiradas) */}
+          <div className={`p-3.5 rounded-xl border space-y-1 ${
+            lessonsSummary.stockRemaining < 0 
+              ? 'bg-rose-50 border-rose-200 text-rose-900' 
+              : lessonsSummary.stockRemaining === 0 && lessonsSummary.totalPurchased === 0
+                ? 'bg-slate-50 border-slate-200 text-slate-700'
+                : 'bg-emerald-50 border-emerald-200 text-emerald-950'
+          }`}>
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] font-bold block uppercase tracking-wider">Saldo em Estoque</span>
+              <Boxes className="w-3.5 h-3.5 opacity-80" />
+            </div>
+            <div className="text-xl font-black tracking-tight">
+              {lessonsSummary.stockRemaining} <span className="text-xs font-semibold opacity-75">un</span>
+            </div>
+            <span className="text-[10px] block font-medium opacity-85">
+              {lessonsSummary.totalPurchased === 0 
+                ? 'Sem compras cadastradas' 
+                : `${lessonsSummary.totalDelivered} un já retiradas`}
+            </span>
           </div>
 
-          <div className="p-3.5 rounded-xl bg-indigo-50/50 border border-indigo-100">
-            <span className="text-[11px] font-bold text-indigo-700 block uppercase">Retiradas</span>
-            <span className="text-xl font-extrabold text-indigo-800">{lessonsSummary.totalDelivered}</span>
-            <span className="text-[10px] text-indigo-600 block mt-0.5">
-              {lessonsSummary.pendingDelivery > 0 ? `${lessonsSummary.pendingDelivery} a retirar` : '100% entregues'}
+          {/* 3. Retiradas Fisicamente */}
+          <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200/80 space-y-1">
+            <span className="text-[10px] font-bold text-slate-500 block uppercase tracking-wider">Retiradas</span>
+            <div className="text-xl font-black text-slate-800 tracking-tight">
+              {lessonsSummary.totalDelivered} <span className="text-xs font-semibold text-slate-400">un</span>
+            </div>
+            <span className="text-[10px] text-slate-500 block font-medium">
+              Subtraídas do estoque
+            </span>
+          </div>
+
+          {/* 4. Total Pedidas */}
+          <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200/80 space-y-1">
+            <span className="text-[10px] font-bold text-slate-500 block uppercase tracking-wider">Total Pedidas</span>
+            <div className="text-xl font-black text-slate-800 tracking-tight">
+              {lessonsSummary.totalRequested} <span className="text-xs font-semibold text-slate-400">un</span>
+            </div>
+            <span className="text-[10px] text-slate-500 block font-medium">
+              Demandadas pelas classes
+            </span>
+          </div>
+
+          {/* 5. Lições Pagas */}
+          <div className="p-3.5 rounded-xl bg-emerald-50/50 border border-emerald-100 space-y-1">
+            <span className="text-[10px] font-bold text-emerald-700 block uppercase tracking-wider">Lições Pagas</span>
+            <div className="text-xl font-black text-emerald-800 tracking-tight">
+              {lessonsSummary.totalPaid} <span className="text-xs font-semibold text-emerald-600">un</span>
+            </div>
+            <span className="text-[10px] text-emerald-700 block font-medium">
+              {lessonsSummary.totalRequested > 0 ? `${Math.round((lessonsSummary.totalPaid / lessonsSummary.totalRequested) * 100)}% quitadas` : '0%'}
             </span>
           </div>
         </div>

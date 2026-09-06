@@ -156,5 +156,24 @@ service cloud.firestore {
 
       allow delete: if isSignedIn() && isSecretariaOrMaster() && isValidId(orderId);
     }
+
+    function isValidLessonPurchase(data) {
+      return data.keys().hasAll(['quantity', 'purchaseDate', 'createdByUid']) &&
+             data.quantity is number && data.quantity > 0 &&
+             data.purchaseDate is string &&
+             data.createdByUid is string && data.createdByUid.size() <= 128;
+    }
+
+    // Lesson Purchases (Lições Compradas antecipadamente pela direção)
+    match /lessonPurchases/{purchaseId} {
+      allow get, list: if isSignedIn() && isApprovedUser();
+
+      allow create: if isSignedIn() && isSecretariaOrMaster() && isValidId(purchaseId) && isValidLessonPurchase(incoming()) &&
+        incoming().createdByUid == request.auth.uid;
+
+      allow update: if isSignedIn() && isSecretariaOrMaster() && isValidId(purchaseId) && isValidLessonPurchase(incoming());
+
+      allow delete: if isSignedIn() && isSecretariaOrMaster() && isValidId(purchaseId);
+    }
   }
 }
