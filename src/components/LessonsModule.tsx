@@ -270,6 +270,54 @@ export const LessonsModule: React.FC<LessonsModuleProps> = ({
     return map;
   }, [orders]);
 
+  // Executive Overview Summary for Secretaria (Lições Pedidas, Pagas, Pendentes de Retirada)
+  const overallStats = useMemo(() => {
+    let totalRequested = 0;
+    let totalPaid = 0;
+    let totalPendingPayment = 0;
+    let totalDelivered = 0;
+    let totalPendingDelivery = 0;
+    let totalAmount = 0;
+    let totalPaidAmount = 0;
+
+    orders.forEach(o => {
+      const q = o.quantity || 0;
+      totalRequested += q;
+      const val = o.totalAmount || (o.unitPrice ? o.unitPrice * q : q * 15);
+      totalAmount += val;
+
+      if (o.paymentStatus === 'pago') {
+        totalPaid += q;
+        totalPaidAmount += val;
+      } else {
+        totalPendingPayment += q;
+      }
+
+      if (o.deliveryStatus === 'retirado') {
+        totalDelivered += q;
+      } else {
+        totalPendingDelivery += q;
+      }
+    });
+
+    const pendingPaymentAmount = totalAmount - totalPaidAmount;
+    const paymentPercentage = totalRequested > 0 ? Math.round((totalPaid / totalRequested) * 100) : 0;
+    const deliveryPercentage = totalRequested > 0 ? Math.round((totalDelivered / totalRequested) * 100) : 0;
+
+    return {
+      totalRequested,
+      totalPaid,
+      totalPendingPayment,
+      totalDelivered,
+      totalPendingDelivery,
+      totalAmount,
+      totalPaidAmount,
+      pendingPaymentAmount,
+      paymentPercentage,
+      deliveryPercentage
+    };
+  }, [orders]);
+
   // Orders for the currently selected class in spreadsheet view
   const selectedClassOrders = useMemo(() => {
     if (!selectedClass) return [];
@@ -676,6 +724,119 @@ export const LessonsModule: React.FC<LessonsModuleProps> = ({
           </button>
         </div>
       )}
+
+      {/* ========================================================
+          RESUMO VISUAL GERENCIAL (SECRETARIA E COORDENAÇÃO EBD)
+          Cards com: Total Pedidas, Pagas, Pendentes de Retirada e A Receber
+      ======================================================== */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
+        
+        {/* 1. Total de Lições Pedidas */}
+        <div className="bg-white rounded-2xl p-4.5 border border-slate-200 shadow-xs space-y-2.5">
+          <div className="flex items-center justify-between">
+            <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Total Pedidas</span>
+            <div className="w-8 h-8 rounded-xl bg-indigo-50 text-indigo-700 flex items-center justify-center font-bold">
+              <BookMarked className="w-4 h-4" />
+            </div>
+          </div>
+          <div>
+            <div className="text-2xl font-black text-slate-900 tracking-tight">
+              {overallStats.totalRequested} <span className="text-sm font-semibold text-slate-400">un</span>
+            </div>
+          </div>
+          <div className="pt-2 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500">
+            <span>{classes.length} classes registradas</span>
+            <span className="font-semibold text-slate-700">{formatCurrency(overallStats.totalAmount)}</span>
+          </div>
+        </div>
+
+        {/* 2. Lições Pagas */}
+        <div className="bg-white rounded-2xl p-4.5 border border-slate-200 shadow-xs space-y-2.5">
+          <div className="flex items-center justify-between">
+            <span className="text-[11px] font-bold text-emerald-700 uppercase tracking-wider">Lições Pagas</span>
+            <div className="w-8 h-8 rounded-xl bg-emerald-50 text-emerald-700 flex items-center justify-center font-bold">
+              <CheckCircle2 className="w-4 h-4" />
+            </div>
+          </div>
+          <div className="flex items-baseline justify-between">
+            <div className="text-2xl font-black text-emerald-600 tracking-tight">
+              {overallStats.totalPaid} <span className="text-sm font-semibold text-emerald-500/80">un</span>
+            </div>
+            <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
+              {overallStats.paymentPercentage}% quitado
+            </span>
+          </div>
+          <div className="pt-2 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500">
+            <span>Arrecadado:</span>
+            <span className="font-bold text-emerald-600">{formatCurrency(overallStats.totalPaidAmount)}</span>
+          </div>
+        </div>
+
+        {/* 3. Pendentes de Retirada */}
+        <div className={`rounded-2xl p-4.5 border shadow-xs space-y-2.5 ${
+          overallStats.totalPendingDelivery > 0 
+            ? 'bg-amber-50/40 border-amber-200' 
+            : 'bg-white border-slate-200'
+        }`}>
+          <div className="flex items-center justify-between">
+            <span className={`text-[11px] font-bold uppercase tracking-wider ${
+              overallStats.totalPendingDelivery > 0 ? 'text-amber-800' : 'text-slate-500'
+            }`}>
+              Pendentes de Retirada
+            </span>
+            <div className={`w-8 h-8 rounded-xl flex items-center justify-center font-bold ${
+              overallStats.totalPendingDelivery > 0 
+                ? 'bg-amber-100 text-amber-800' 
+                : 'bg-slate-100 text-slate-600'
+            }`}>
+              <Clock className="w-4 h-4" />
+            </div>
+          </div>
+          <div className="flex items-baseline justify-between">
+            <div className={`text-2xl font-black tracking-tight ${
+              overallStats.totalPendingDelivery > 0 ? 'text-amber-900' : 'text-slate-900'
+            }`}>
+              {overallStats.totalPendingDelivery} <span className="text-sm font-semibold text-slate-500">un</span>
+            </div>
+            <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full ${
+              overallStats.totalPendingDelivery > 0
+                ? 'bg-amber-100 text-amber-800'
+                : 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+            }`}>
+              {overallStats.totalPendingDelivery > 0 ? 'Aguardando entrega' : 'Todas retiradas'}
+            </span>
+          </div>
+          <div className="pt-2 border-t border-slate-200/60 flex items-center justify-between text-xs text-slate-500">
+            <span>Já entregues:</span>
+            <span className="font-semibold text-slate-700">{overallStats.totalDelivered} un ({overallStats.deliveryPercentage}%)</span>
+          </div>
+        </div>
+
+        {/* 4. A Receber / Pendente de Pagamento */}
+        <div className="bg-white rounded-2xl p-4.5 border border-slate-200 shadow-xs space-y-2.5">
+          <div className="flex items-center justify-between">
+            <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">A Receber</span>
+            <div className="w-8 h-8 rounded-xl bg-slate-100 text-slate-700 flex items-center justify-center font-bold">
+              <DollarSign className="w-4 h-4" />
+            </div>
+          </div>
+          <div className="flex items-baseline justify-between">
+            <div className="text-2xl font-black text-slate-800 tracking-tight">
+              {overallStats.totalPendingPayment} <span className="text-sm font-semibold text-slate-400">un</span>
+            </div>
+            {overallStats.totalPendingPayment > 0 && (
+              <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-slate-100 text-slate-700">
+                Pendente
+              </span>
+            )}
+          </div>
+          <div className="pt-2 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500">
+            <span>Saldo a receber:</span>
+            <span className="font-bold text-amber-700">{formatCurrency(overallStats.pendingPaymentAmount)}</span>
+          </div>
+        </div>
+
+      </div>
 
       {/* ========================================================
           TAB 1: LIÇÕES POR CLASSE (CARDS OU PLANILHA EXCEL)

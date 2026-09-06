@@ -18,7 +18,9 @@ import {
   Calendar,
   Layers,
   Camera,
-  Tag
+  Tag,
+  PenTool,
+  CheckCircle2
 } from 'lucide-react';
 import { 
   collection, 
@@ -38,6 +40,7 @@ import {
 import { formatCurrency, formatDate, getAccountName, getStatusBadge } from '../utils/formatters';
 import { uploadReceiptImage } from '../utils/storage';
 import { ReceiptModal } from './ReceiptModal';
+import { DigitalSignaturePad } from './DigitalSignaturePad';
 
 export const INCOME_CATEGORIES = [
   'Cota 5% Igreja',
@@ -84,6 +87,8 @@ export const FinancialModule: React.FC<FinancialModuleProps> = ({
   const [formDescription, setFormDescription] = useState<string>('');
   const [formFile, setFormFile] = useState<File | null>(null);
   const [filePreview, setFilePreview] = useState<string | null>(null);
+  const [signatureDataUrl, setSignatureDataUrl] = useState<string | null>(null);
+  const [signatureSignerName, setSignatureSignerName] = useState<string>('');
   const [uploadProgress, setUploadProgress] = useState<number>(0);
   const [autoApprove, setAutoApprove] = useState<boolean>(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -96,8 +101,15 @@ export const FinancialModule: React.FC<FinancialModuleProps> = ({
   const streamRef = useRef<MediaStream | null>(null);
   const directCameraInputRef = useRef<HTMLInputElement | null>(null);
 
-  // Receipt Modal View
-  const [viewReceipt, setViewReceipt] = useState<{ url: string; title: string; description?: string } | null>(null);
+  // Receipt & Signature Modal View
+  const [viewReceipt, setViewReceipt] = useState<{ 
+    url?: string; 
+    signatureUrl?: string;
+    signatureName?: string;
+    signatureDate?: string;
+    title: string; 
+    description?: string 
+  } | null>(null);
 
   // Approval/Delete Action State
   const [actionLoadingId, setActionLoadingId] = useState<string | null>(null);
@@ -287,11 +299,6 @@ export const FinancialModule: React.FC<FinancialModuleProps> = ({
       return;
     }
 
-    if (!formDescription.trim()) {
-      setFormError('Informe a descrição do lançamento.');
-      return;
-    }
-
     if (!currentUser) {
       setFormError('Usuário não autenticado.');
       return;
@@ -314,19 +321,26 @@ export const FinancialModule: React.FC<FinancialModuleProps> = ({
       const canDirectApprove = isMaster || isDirigente;
       const finalStatus: TransactionStatus = (canDirectApprove && autoApprove) ? 'approved' : 'pending';
 
+      const finalDescription = formDescription.trim() || formCategory || (formType === 'income' ? 'Entrada financeira' : 'Saída financeira');
+
       const payload = {
         type: formType,
         account: formAccount,
         category: formCategory || (formType === 'income' ? INCOME_CATEGORIES[0] : EXPENSE_CATEGORIES[0]),
         amount: amountNum,
         date: formDate,
-        description: formDescription.trim(),
+        description: finalDescription,
         status: finalStatus,
         createdByUid: currentUser.uid,
         createdByName: userProfile?.displayName || currentUser.displayName || currentUser.email?.split('@')[0] || 'Usuário',
         createdByEmail: currentUser.email || '',
         createdAt: new Date().toISOString(),
         ...(receiptUrl ? { receiptUrl, receiptName } : {}),
+        ...(signatureDataUrl ? {
+          signatureUrl: signatureDataUrl,
+          signatureName: signatureSignerName.trim() || userProfile?.displayName || currentUser.displayName || 'Responsável',
+          signatureDate: new Date().toISOString()
+        } : {}),
         ...(finalStatus === 'approved' ? {
           approvedByUid: currentUser.uid,
           approvedByName: userProfile?.displayName || currentUser.displayName || 'Admin',
@@ -342,6 +356,8 @@ export const FinancialModule: React.FC<FinancialModuleProps> = ({
       setFormDescription('');
       setFormFile(null);
       setFilePreview(null);
+      setSignatureDataUrl(null);
+      setSignatureSignerName('');
       setFormCategory(INCOME_CATEGORIES[0]);
       setUploadProgress(0);
       setIsModalOpen(false);
@@ -749,6 +765,14 @@ export const FinancialModule: React.FC<FinancialModuleProps> = ({
                           </span>
                         )}
 
+                        {/* Signature Indicator Badge */}
+                        {t.signatureUrl && (
+                          <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 flex items-center gap-1" title={`Assinado por ${t.signatureName || t.createdByName}`}>
+                            <PenTool className="w-2.5 h-2.5 text-emerald-600" />
+                            <span>Assinado</span>
+                          </span>
+                        )}
+
                         {/* Status Badge */}
                         <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${statusBadge.bg} ${statusBadge.color} ${statusBadge.border}`}>
                           {statusBadge.label}
@@ -781,19 +805,28 @@ export const FinancialModule: React.FC<FinancialModuleProps> = ({
                       </span>
                     </div>
 
-                    {/* Receipt preview button */}
-                    {t.receiptUrl && (
+                    {/* Receipt & Signature preview button */}
+                    {(t.receiptUrl || t.signatureUrl) && (
                       <button
                         onClick={() => setViewReceipt({
-                          url: t.receiptUrl!,
+                          url: t.receiptUrl,
+                          signatureUrl: t.signatureUrl,
+                          signatureName: t.signatureName,
+                          signatureDate: t.signatureDate || t.createdAt,
                           title: t.description,
                           description: `${getAccountName(t.account)} — ${formatCurrency(t.amount)} (${formatDate(t.date)})`
                         })}
-                        title="Visualizar comprovante anexado"
-                        className="p-1.5 text-indigo-600 hover:bg-indigo-50 rounded-lg border border-indigo-200 flex items-center gap-1 text-xs font-medium cursor-pointer"
+                        title="Visualizar comprovante e/ou assinatura digital"
+                        className="p-1.5 text-indigo-600 hover:bg-indigo-50 rounded-lg border border-indigo-200 flex items-center gap-1.5 text-xs font-medium cursor-pointer"
                       >
-                        <ImageIcon className="w-3.5 h-3.5" />
-                        <span className="hidden sm:inline">Comprovante</span>
+                        {t.receiptUrl ? (
+                          <ImageIcon className="w-3.5 h-3.5" />
+                        ) : (
+                          <PenTool className="w-3.5 h-3.5 text-emerald-600" />
+                        )}
+                        <span className="hidden sm:inline">
+                          {t.receiptUrl && t.signatureUrl ? 'Anexos (2)' : t.receiptUrl ? 'Comprovante' : 'Assinatura'}
+                        </span>
                       </button>
                     )}
 
@@ -984,20 +1017,32 @@ export const FinancialModule: React.FC<FinancialModuleProps> = ({
                 </div>
               </div>
 
-              {/* Descrição */}
+              {/* Descrição (Opcional) */}
               <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">
-                  Descrição / Histórico *
-                </label>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block text-xs font-bold text-slate-700">
+                    Descrição / Histórico <span className="font-normal text-slate-400">(Opcional)</span>
+                  </label>
+                  <span className="text-[10px] text-slate-400">Pode deixar em branco</span>
+                </div>
                 <textarea
                   rows={2}
-                  required
-                  placeholder="Ex: Oferta dominical, Pagamento gráfica, Compra de revistas trimestre..."
+                  placeholder="Opcional - detalhamento ou histórico adicional do lançamento..."
                   value={formDescription}
                   onChange={(e) => setFormDescription(e.target.value)}
                   className="w-full p-2.5 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white resize-none"
                 />
               </div>
+
+              {/* Assinatura Digital Escrita */}
+              <DigitalSignaturePad
+                initialSignerName={userProfile?.displayName || currentUser?.displayName || ''}
+                onSignatureChange={(dataUrl, name) => {
+                  setSignatureDataUrl(dataUrl);
+                  setSignatureSignerName(name);
+                }}
+                disabled={isSubmitting}
+              />
 
               {/* Comprovante / Anexo */}
               <div>
@@ -1128,11 +1173,14 @@ export const FinancialModule: React.FC<FinancialModuleProps> = ({
         </div>
       )}
 
-      {/* RECEIPT VIEW MODAL */}
+      {/* RECEIPT & SIGNATURE VIEW MODAL */}
       <ReceiptModal
         isOpen={!!viewReceipt}
         onClose={() => setViewReceipt(null)}
         imageUrl={viewReceipt?.url}
+        signatureUrl={viewReceipt?.signatureUrl}
+        signatureName={viewReceipt?.signatureName}
+        signatureDate={viewReceipt?.signatureDate}
         title={viewReceipt?.title}
         description={viewReceipt?.description}
       />

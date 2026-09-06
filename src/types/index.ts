@@ -24,6 +24,9 @@ export interface FinancialTransaction {
   description: string;
   receiptUrl?: string;
   receiptName?: string;
+  signatureUrl?: string;
+  signatureName?: string;
+  signatureDate?: string;
   status: TransactionStatus;
   createdByUid: string;
   createdByName: string;
