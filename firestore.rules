@@ -1,0 +1,147 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Default deny all
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() > 0 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function isMasterByEmail() {
+      return isSignedIn() && request.auth.token.email == 'vitorleonardocl@gmail.com';
+    }
+
+    function getUserDoc() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+
+    function hasUserDoc() {
+      return exists(/databases/$(database)/documents/users/$(request.auth.uid));
+    }
+
+    function getUserRole() {
+      return isMasterByEmail() ? 'MASTER' : (hasUserDoc() ? getUserDoc().role : 'PENDING');
+    }
+
+    function isMaster() {
+      return isSignedIn() && (isMasterByEmail() || getUserRole() == 'MASTER');
+    }
+
+    function isDirigenteOrMaster() {
+      return isSignedIn() && (isMaster() || getUserRole() == 'DIRIGENTE');
+    }
+
+    function isSecretariaOrMaster() {
+      return isSignedIn() && (isMaster() || getUserRole() == 'DIRIGENTE' || getUserRole() == 'SECRETARIA');
+    }
+
+    function isApprovedUser() {
+      return isSignedIn() && (isMaster() || getUserRole() in ['DIRIGENTE', 'SECRETARIA', 'TESOURARIA']);
+    }
+
+    function isValidUser(data) {
+      return data.keys().hasAll(['uid', 'email', 'role', 'createdAt']) &&
+             data.uid is string && data.uid.size() <= 128 &&
+             data.email is string && data.email.size() <= 256 &&
+             data.role in ['MASTER', 'DIRIGENTE', 'SECRETARIA', 'TESOURARIA', 'PENDING'];
+    }
+
+    function isValidTransaction(data) {
+      return data.keys().hasAll(['type', 'account', 'amount', 'date', 'description', 'status', 'createdByUid', 'createdByEmail', 'createdAt']) &&
+             data.type in ['income', 'expense'] &&
+             data.account in ['caixa_5', 'caixa_licoes'] &&
+             data.amount is number && data.amount > 0 &&
+             data.date is string && data.date.size() <= 32 &&
+             data.description is string && data.description.size() <= 500 &&
+             data.status in ['approved', 'pending', 'rejected'] &&
+             data.createdByUid is string && data.createdByUid.size() <= 128 &&
+             data.createdByEmail is string && data.createdByEmail.size() <= 256;
+    }
+
+    function isValidLessonOrder(data) {
+      return data.keys().hasAll(['lessonType', 'className', 'quantity', 'paymentStatus', 'deliveryStatus', 'requestedAt', 'createdByUid', 'createdAt']) &&
+             data.lessonType in ['Adulto', 'Aluno', 'Jovens', 'Infantil', 'Outro'] &&
+             data.className is string && data.className.size() <= 128 &&
+             data.quantity is number && data.quantity > 0 &&
+             data.paymentStatus in ['pago', 'nao_pago'] &&
+             data.deliveryStatus in ['retirado', 'nao_retirado'] &&
+             data.createdByUid is string && data.createdByUid.size() <= 128;
+    }
+
+    // Users collection
+    match /users/{userId} {
+      allow get: if isSignedIn() && (request.auth.uid == userId || isMaster());
+      allow list: if isSignedIn() && isMaster();
+      
+      allow create: if isSignedIn() && isValidId(userId) && request.auth.uid == userId && isValidUser(incoming()) &&
+        (
+          (request.auth.token.email == 'vitorleonardocl@gmail.com' && incoming().role == 'MASTER') ||
+          (request.auth.token.email != 'vitorleonardocl@gmail.com' && incoming().role == 'PENDING')
+        );
+
+      allow update: if isSignedIn() && isValidId(userId) && isValidUser(incoming()) && (
+        isMaster() ||
+        (
+          request.auth.uid == userId &&
+          incoming().role == existing().role &&
+          incoming().uid == existing().uid &&
+          incoming().email == existing().email
+        )
+      );
+
+      allow delete: if isSignedIn() && isMaster() && request.auth.uid != userId;
+    }
+
+    // Transactions collection
+    match /transactions/{transactionId} {
+      allow get, list: if isSignedIn() && isApprovedUser();
+      
+      allow create: if isSignedIn() && isApprovedUser() && isValidId(transactionId) && isValidTransaction(incoming()) &&
+        incoming().createdByUid == request.auth.uid &&
+        (
+          (isDirigenteOrMaster() && incoming().status in ['approved', 'pending']) ||
+          (!isDirigenteOrMaster() && incoming().status == 'pending')
+        );
+
+      allow update: if isSignedIn() && isApprovedUser() && isValidId(transactionId) && isValidTransaction(incoming()) &&
+        (
+          isDirigenteOrMaster() ||
+          (
+            existing().createdByUid == request.auth.uid &&
+            existing().status == 'pending' &&
+            incoming().status == 'pending'
+          )
+        );
+
+      allow delete: if isSignedIn() && isDirigenteOrMaster() && isValidId(transactionId);
+    }
+
+    // Lesson Orders collection
+    match /lessonOrders/{orderId} {
+      allow get, list: if isSignedIn() && isApprovedUser();
+      
+      allow create: if isSignedIn() && isSecretariaOrMaster() && isValidId(orderId) && isValidLessonOrder(incoming()) &&
+        incoming().createdByUid == request.auth.uid;
+
+      allow update: if isSignedIn() && isSecretariaOrMaster() && isValidId(orderId) && isValidLessonOrder(incoming());
+
+      allow delete: if isSignedIn() && isDirigenteOrMaster() && isValidId(orderId);
+    }
+  }
+}
