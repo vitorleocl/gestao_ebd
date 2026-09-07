@@ -110,7 +110,7 @@ export const LessonsModule: React.FC<LessonsModuleProps> = ({
   const [editingOrder, setEditingOrder] = useState<LessonOrder | null>(null);
 
   // Order Form State
-  const [formLessonType, setFormLessonType] = useState<LessonType>('Adulto');
+  const [formLessonType, setFormLessonType] = useState<LessonType>('Aluno');
   const [formQuantity, setFormQuantity] = useState<string>('10');
   const [formUnitPrice, setFormUnitPrice] = useState<string>('15');
   const [formPaymentStatus, setFormPaymentStatus] = useState<PaymentStatus>('nao_pago');
@@ -445,7 +445,7 @@ export const LessonsModule: React.FC<LessonsModuleProps> = ({
   // Open Order Modal for creation
   const handleOpenAddOrder = () => {
     setEditingOrder(null);
-    setFormLessonType('Adulto');
+    setFormLessonType('Aluno');
     setFormQuantity('10');
     setFormUnitPrice('15');
     setFormPaymentStatus('nao_pago');
@@ -1308,8 +1308,16 @@ export const LessonsModule: React.FC<LessonsModuleProps> = ({
 
                               {/* Lesson Type */}
                               <td className="py-2.5 px-3">
-                                <div className="font-bold text-slate-900">{ord.lessonType}</div>
-                                <div className="text-[10px] text-slate-400">{formatDate(ord.requestedAt)}</div>
+                                <div className="flex items-center gap-1.5">
+                                  <span className={`inline-flex items-center px-2 py-0.5 rounded-md text-xs font-bold ${
+                                    ord.lessonType === 'Professor'
+                                      ? 'bg-purple-100 text-purple-800 border border-purple-200'
+                                      : 'bg-indigo-50 text-indigo-700 border border-indigo-100'
+                                  }`}>
+                                    {ord.lessonType}
+                                  </span>
+                                </div>
+                                <div className="text-[10px] text-slate-400 mt-0.5">{formatDate(ord.requestedAt)}</div>
                               </td>
 
                               {/* Quantity */}
@@ -1801,10 +1809,10 @@ export const LessonsModule: React.FC<LessonsModuleProps> = ({
                 <select
                   value={formLessonType}
                   onChange={(e) => setFormLessonType(e.target.value as LessonType)}
-                  className="w-full px-3 py-2 text-xs font-semibold bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white cursor-pointer"
+                  className="w-full px-3 py-2 text-xs font-semibold bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white cursor-pointer text-slate-800"
                 >
-                  <option value="Adulto">Adulto</option>
                   <option value="Aluno">Aluno</option>
+                  <option value="Professor">Professor</option>
                 </select>
               </div>
 
