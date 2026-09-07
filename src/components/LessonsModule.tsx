@@ -40,7 +40,9 @@ import {
   DeliveryStatus, 
   ClassConsolidation,
   EbdClass,
-  LessonPurchase
+  LessonPurchase,
+  AGE_GROUPS,
+  AgeGroup
 } from '../types';
 import { formatCurrency, formatDate, getTodayDateString } from '../utils/formatters';
 import { LessonPurchasesModal } from './LessonPurchasesModal';
@@ -54,13 +56,19 @@ interface LessonsModuleProps {
   loadingPurchases?: boolean;
 }
 
-const DEFAULT_CLASS_PRESETS = [
-  'Classe dos Homens',
-  'Classe das Mulheres',
-  'Classe de Jovens',
-  'Classe de Adolescentes',
-  'Classe Infantil / Crianças',
-  'Classe de Novos Convertidos / Discipulado'
+const DEFAULT_CLASS_PRESETS: { name: string; ageGroup: AgeGroup }[] = [
+  { name: 'Classe dos Homens', ageGroup: 'Adultos' },
+  { name: 'Classe das Mulheres', ageGroup: 'Adultos' },
+  { name: 'Classe de Jovens', ageGroup: 'Jovens (18 a 29 anos)' },
+  { name: 'Classe de Juvenis', ageGroup: 'Juvenis (15 a 17 anos)' },
+  { name: 'Classe de Adolescentes', ageGroup: 'Adolescentes (13 a 14 anos)' },
+  { name: 'Classe de Pré-Adolescentes', ageGroup: 'Pré-Adolescentes (11 a 12 anos)' },
+  { name: 'Classe Juniores (9 a 10 anos)', ageGroup: 'Juniores (9 a 10 anos)' },
+  { name: 'Classe Juniores (7 a 8 anos)', ageGroup: 'Juniores (7 a 8 anos)' },
+  { name: 'Classe Primários (5 e 6 anos)', ageGroup: 'Primários (5 e 6 anos)' },
+  { name: 'Classe Maternal (3 e 4 anos)', ageGroup: 'Maternal (3 e 4 anos)' },
+  { name: 'Classe Berçário (0 a 2 anos)', ageGroup: 'Berçário (0 a 2 anos)' },
+  { name: 'Discipulado / Novos Convertidos', ageGroup: 'Adultos' }
 ];
 
 export const LessonsModule: React.FC<LessonsModuleProps> = ({ 
@@ -102,8 +110,10 @@ export const LessonsModule: React.FC<LessonsModuleProps> = ({
 
   // Class Management State
   const [newClassName, setNewClassName] = useState('');
+  const [newClassAgeGroup, setNewClassAgeGroup] = useState<string>(AGE_GROUPS[9]); // Padrão: Adultos
   const [editingClass, setEditingClass] = useState<EbdClass | null>(null);
   const [editClassNameVal, setEditClassNameVal] = useState('');
+  const [editClassAgeGroupVal, setEditClassAgeGroupVal] = useState<string>(AGE_GROUPS[9]);
   const [isClassSubmitting, setIsClassSubmitting] = useState(false);
 
   // Pay confirmation modal
@@ -121,12 +131,13 @@ export const LessonsModule: React.FC<LessonsModuleProps> = ({
     setIsClassSubmitting(true);
     try {
       const nowIso = new Date().toISOString();
-      for (const name of DEFAULT_CLASS_PRESETS) {
+      for (const preset of DEFAULT_CLASS_PRESETS) {
         // Only add if not already present
-        const alreadyExists = classes.some(c => c.name.toLowerCase() === name.toLowerCase());
+        const alreadyExists = classes.some(c => c.name.toLowerCase() === preset.name.toLowerCase());
         if (!alreadyExists) {
           await addDoc(collection(db, 'ebdClasses'), {
-            name,
+            name: preset.name,
+            ageGroup: preset.ageGroup,
             createdAt: nowIso,
             createdByUid: currentUser.uid,
             createdByName: userProfile?.displayName || 'Secretaria EBD'
@@ -144,10 +155,13 @@ export const LessonsModule: React.FC<LessonsModuleProps> = ({
     }
   };
 
-  // Create a new class (name only)
+  // Create a new class with mandatory age group
   const handleCreateClass = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newClassName.trim() || !currentUser) return;
+    if (!newClassName.trim() || !newClassAgeGroup || !currentUser) {
+      setStatusMessage({ type: 'error', text: 'Informe o nome da classe e a faixa etária da lição.' });
+      return;
+    }
 
     setIsClassSubmitting(true);
     try {
@@ -161,13 +175,15 @@ export const LessonsModule: React.FC<LessonsModuleProps> = ({
 
       await addDoc(collection(db, 'ebdClasses'), {
         name,
+        ageGroup: newClassAgeGroup,
         createdAt: new Date().toISOString(),
         createdByUid: currentUser.uid,
         createdByName: userProfile?.displayName || 'Secretaria EBD'
       });
 
       setNewClassName('');
-      setStatusMessage({ type: 'success', text: `Classe "${name}" criada com sucesso!` });
+      setNewClassAgeGroup(AGE_GROUPS[9]);
+      setStatusMessage({ type: 'success', text: `Classe "${name}" (${newClassAgeGroup}) criada com sucesso!` });
       setTimeout(() => setStatusMessage(null), 4000);
     } catch (err: unknown) {
       console.error("Erro ao criar classe:", err);
@@ -178,14 +194,17 @@ export const LessonsModule: React.FC<LessonsModuleProps> = ({
     }
   };
 
-  // Update existing class name
+  // Update existing class name and age group
   const handleSaveClassEdit = async () => {
     if (!editingClass || !editClassNameVal.trim() || !currentUser) return;
     setIsClassSubmitting(true);
     try {
       const newName = editClassNameVal.trim();
+      const newAgeGroup = editClassAgeGroupVal || AGE_GROUPS[9];
+
       await updateDoc(doc(db, 'ebdClasses', editingClass.id), {
         name: newName,
+        ageGroup: newAgeGroup,
         updatedAt: new Date().toISOString()
       });
 
@@ -201,12 +220,12 @@ export const LessonsModule: React.FC<LessonsModuleProps> = ({
 
       // If this class is currently selected in sheet view, update reference
       if (selectedClass?.id === editingClass.id) {
-        setSelectedClass({ ...editingClass, name: newName });
+        setSelectedClass({ ...editingClass, name: newName, ageGroup: newAgeGroup });
       }
 
       setEditingClass(null);
       setEditClassNameVal('');
-      setStatusMessage({ type: 'success', text: `Classe atualizada para "${newName}"!` });
+      setStatusMessage({ type: 'success', text: `Classe atualizada para "${newName}" (${newAgeGroup})!` });
       setTimeout(() => setStatusMessage(null), 4000);
     } catch (err: unknown) {
       console.error("Erro ao editar classe:", err);
@@ -999,12 +1018,19 @@ export const LessonsModule: React.FC<LessonsModuleProps> = ({
                         <div className="space-y-2">
                           <div className="flex items-center justify-between">
                             <div className="flex items-center gap-2">
-                              <div className="w-8 h-8 rounded-lg bg-emerald-50 text-emerald-700 flex items-center justify-center font-bold text-xs group-hover:bg-emerald-600 group-hover:text-white transition-colors">
+                              <div className="w-8 h-8 rounded-lg bg-emerald-50 text-emerald-700 flex items-center justify-center font-bold text-xs group-hover:bg-emerald-600 group-hover:text-white transition-colors shrink-0">
                                 📖
                               </div>
-                              <h3 className="font-black text-slate-900 text-sm group-hover:text-emerald-700 transition-colors">
-                                {c.name}
-                              </h3>
+                              <div className="min-w-0">
+                                <h3 className="font-black text-slate-900 text-sm group-hover:text-emerald-700 transition-colors truncate">
+                                  {c.name}
+                                </h3>
+                                {c.ageGroup && (
+                                  <span className="inline-flex items-center px-1.5 py-0.5 rounded-md text-[10px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-100 mt-0.5">
+                                    {c.ageGroup}
+                                  </span>
+                                )}
+                              </div>
                             </div>
                             <span className="text-xs text-slate-400 group-hover:text-emerald-600 flex items-center">
                               <ChevronRight className="w-4 h-4" />
@@ -1074,13 +1100,18 @@ export const LessonsModule: React.FC<LessonsModuleProps> = ({
                       <ArrowLeft className="w-4 h-4" />
                     </button>
                     <div>
-                      <div className="flex items-center gap-2">
+                      <div className="flex flex-wrap items-center gap-2">
                         <span className="text-xs font-bold uppercase tracking-wider text-emerald-600 bg-emerald-50 px-2.5 py-0.5 rounded-full border border-emerald-200">
                           Planilha de Lições
                         </span>
                         <h2 className="text-lg font-black text-slate-900 tracking-tight">
                           {selectedClass.name}
                         </h2>
+                        {selectedClass.ageGroup && (
+                          <span className="text-xs font-bold text-indigo-800 bg-indigo-50 px-2.5 py-0.5 rounded-full border border-indigo-200">
+                            Faixa: {selectedClass.ageGroup}
+                          </span>
+                        )}
                       </div>
                       <p className="text-xs text-slate-500 mt-0.5">
                         Controle linha a linha de quantidade solicitada, preço unitário, pagamento e retirada estilo Excel
@@ -1361,24 +1392,49 @@ export const LessonsModule: React.FC<LessonsModuleProps> = ({
             </p>
 
             {/* Quick Add Class Input Form */}
-            <form onSubmit={handleCreateClass} className="flex flex-col sm:flex-row gap-3 pt-2">
-              <input
-                type="text"
-                required
-                placeholder="Nome da nova classe (ex: Classe Betel, Classe dos Homens, Jovens)..."
-                value={newClassName}
-                onChange={(e) => setNewClassName(e.target.value)}
-                className="flex-1 px-4 py-2.5 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white"
-              />
-              <button
-                type="submit"
-                disabled={isClassSubmitting || !newClassName.trim()}
-                className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-xl shadow-xs transition-colors disabled:opacity-50 flex items-center justify-center gap-2 cursor-pointer shrink-0"
-              >
-                {isClassSubmitting && <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />}
-                <PlusCircle className="w-4 h-4" />
-                <span>Cadastrar Classe</span>
-              </button>
+            <form onSubmit={handleCreateClass} className="space-y-3 pt-2">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div className="sm:col-span-2">
+                  <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                    Nome da Nova Classe *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="Nome da nova classe (ex: Classe Betel, Classe dos Homens, Jovens)..."
+                    value={newClassName}
+                    onChange={(e) => setNewClassName(e.target.value)}
+                    className="w-full px-4 py-2.5 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                    Lição por Faixa Etária *
+                  </label>
+                  <select
+                    value={newClassAgeGroup}
+                    onChange={(e) => setNewClassAgeGroup(e.target.value)}
+                    className="w-full px-3 py-2.5 text-xs font-semibold bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white cursor-pointer text-slate-800"
+                  >
+                    {AGE_GROUPS.map(ag => (
+                      <option key={ag} value={ag}>{ag}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div className="flex justify-end">
+                <button
+                  type="submit"
+                  disabled={isClassSubmitting || !newClassName.trim() || !newClassAgeGroup}
+                  className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-xl shadow-xs transition-colors disabled:opacity-50 flex items-center justify-center gap-2 cursor-pointer shrink-0"
+                >
+                  {isClassSubmitting && <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />}
+                  <PlusCircle className="w-4 h-4" />
+                  <span>Cadastrar Classe</span>
+                </button>
+              </div>
             </form>
 
             {/* Default Class Presets Quick Generator */}
@@ -1388,16 +1444,17 @@ export const LessonsModule: React.FC<LessonsModuleProps> = ({
                 <span>Sugestões rápidas:</span>
               </span>
               {DEFAULT_CLASS_PRESETS.map(preset => {
-                const alreadyAdded = classes.some(c => c.name.toLowerCase() === preset.toLowerCase());
+                const alreadyAdded = classes.some(c => c.name.toLowerCase() === preset.name.toLowerCase());
                 if (alreadyAdded) return null;
                 return (
                   <button
-                    key={preset}
+                    key={preset.name}
                     type="button"
                     onClick={async () => {
                       if (!currentUser) return;
                       await addDoc(collection(db, 'ebdClasses'), {
-                        name: preset,
+                        name: preset.name,
+                        ageGroup: preset.ageGroup,
                         createdAt: new Date().toISOString(),
                         createdByUid: currentUser.uid,
                         createdByName: userProfile?.displayName || 'Secretaria'
@@ -1405,7 +1462,7 @@ export const LessonsModule: React.FC<LessonsModuleProps> = ({
                     }}
                     className="px-2.5 py-1 text-[11px] font-medium bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg transition-colors cursor-pointer"
                   >
-                    + {preset}
+                    + {preset.name}
                   </button>
                 );
               })}
@@ -1434,35 +1491,54 @@ export const LessonsModule: React.FC<LessonsModuleProps> = ({
                   return (
                     <div key={c.id} className="p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 hover:bg-slate-50/70 transition-colors">
                       {isEditing ? (
-                        <div className="flex-1 flex items-center gap-2">
+                        <div className="flex-1 flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
                           <input
                             type="text"
                             value={editClassNameVal}
                             onChange={(e) => setEditClassNameVal(e.target.value)}
+                            placeholder="Nome da classe"
                             className="flex-1 px-3 py-1.5 text-xs bg-white border border-indigo-400 rounded-lg focus:outline-none ring-2 ring-indigo-500/20"
                             autoFocus
                           />
-                          <button
-                            onClick={handleSaveClassEdit}
-                            disabled={isClassSubmitting || !editClassNameVal.trim()}
-                            className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-lg cursor-pointer"
+                          <select
+                            value={editClassAgeGroupVal}
+                            onChange={(e) => setEditClassAgeGroupVal(e.target.value)}
+                            className="px-2.5 py-1.5 text-xs font-semibold bg-white border border-indigo-400 rounded-lg focus:outline-none ring-2 ring-indigo-500/20 cursor-pointer"
                           >
-                            Salvar
-                          </button>
-                          <button
-                            onClick={() => setEditingClass(null)}
-                            className="px-3 py-1.5 text-slate-600 hover:bg-slate-200 text-xs font-semibold rounded-lg cursor-pointer"
-                          >
-                            Cancelar
-                          </button>
+                            {AGE_GROUPS.map(ag => (
+                              <option key={ag} value={ag}>{ag}</option>
+                            ))}
+                          </select>
+                          <div className="flex items-center gap-1 shrink-0">
+                            <button
+                              onClick={handleSaveClassEdit}
+                              disabled={isClassSubmitting || !editClassNameVal.trim()}
+                              className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-lg cursor-pointer"
+                            >
+                              Salvar
+                            </button>
+                            <button
+                              onClick={() => setEditingClass(null)}
+                              className="px-3 py-1.5 text-slate-600 hover:bg-slate-200 text-xs font-semibold rounded-lg cursor-pointer"
+                            >
+                              Cancelar
+                            </button>
+                          </div>
                         </div>
                       ) : (
                         <div className="flex items-center gap-3">
-                          <div className="w-8 h-8 rounded-lg bg-indigo-50 text-indigo-700 flex items-center justify-center font-bold text-xs">
+                          <div className="w-8 h-8 rounded-lg bg-indigo-50 text-indigo-700 flex items-center justify-center font-bold text-xs shrink-0">
                             <School className="w-4 h-4" />
                           </div>
                           <div>
-                            <span className="font-bold text-slate-900 text-sm">{c.name}</span>
+                            <div className="flex flex-wrap items-center gap-2">
+                              <span className="font-bold text-slate-900 text-sm">{c.name}</span>
+                              {c.ageGroup && (
+                                <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-bold bg-indigo-50 text-indigo-800 border border-indigo-100">
+                                  Faixa: {c.ageGroup}
+                                </span>
+                              )}
+                            </div>
                             <div className="text-[11px] text-slate-400">
                               {count > 0 ? `${count} pedido(s) registrado(s)` : 'Nenhum pedido lançado ainda'}
                             </div>
@@ -1487,9 +1563,10 @@ export const LessonsModule: React.FC<LessonsModuleProps> = ({
                             onClick={() => {
                               setEditingClass(c);
                               setEditClassNameVal(c.name);
+                              setEditClassAgeGroupVal(c.ageGroup || AGE_GROUPS[9]);
                             }}
                             className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors cursor-pointer"
-                            title="Editar nome da classe"
+                            title="Editar classe"
                           >
                             <Edit3 className="w-4 h-4" />
                           </button>
@@ -1610,6 +1687,9 @@ export const LessonsModule: React.FC<LessonsModuleProps> = ({
                   </h3>
                   <p className="text-xs text-slate-500">
                     Classe: <strong>{selectedClass.name}</strong>
+                    {selectedClass.ageGroup && (
+                      <span className="ml-1 text-indigo-700 font-semibold">({selectedClass.ageGroup})</span>
+                    )}
                   </p>
                 </div>
               </div>

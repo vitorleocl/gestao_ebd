@@ -38,9 +38,25 @@ export interface FinancialTransaction {
   lessonOrderId?: string;
 }
 
+export const AGE_GROUPS = [
+  'Berçário (0 a 2 anos)',
+  'Maternal (3 e 4 anos)',
+  'Primários (5 e 6 anos)',
+  'Juniores (7 a 8 anos)',
+  'Juniores (9 a 10 anos)',
+  'Pré-Adolescentes (11 a 12 anos)',
+  'Adolescentes (13 a 14 anos)',
+  'Juvenis (15 a 17 anos)',
+  'Jovens (18 a 29 anos)',
+  'Adultos'
+] as const;
+
+export type AgeGroup = typeof AGE_GROUPS[number];
+
 export interface EbdClass {
   id: string;
   name: string;
+  ageGroup?: AgeGroup | string; // Lição por Faixa Etária obrigatória no cadastro
   createdAt: string;
   createdByUid: string;
   createdByName?: string;
@@ -55,6 +71,7 @@ export interface LessonPurchase {
   id: string;
   quantity: number;          // Quantitativo comprado antecipadamente pela direção
   purchaseDate: string;      // Data da compra (YYYY-MM-DD)
+  ageGroup?: AgeGroup | string; // Tipo por faixa Etária
   notes?: string;            // Observações / Trimestre / Detalhes
   unitCost?: number;         // Custo unitário (opcional)
   totalCost?: number;        // Custo total pago (opcional)
