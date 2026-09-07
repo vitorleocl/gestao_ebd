@@ -41,11 +41,13 @@ export const LessonPurchasesModal: React.FC<LessonPurchasesModalProps> = ({
   const { currentUser, userProfile } = useAuth();
 
   const [formAgeGroup, setFormAgeGroup] = useState<string>(AGE_GROUPS[9]); // Padrão: Adultos
+  const [formLessonType, setFormLessonType] = useState<'Professor' | 'Aluno'>('Aluno');
   const [formQuantity, setFormQuantity] = useState<string>('50');
   const [formDate, setFormDate] = useState<string>(getTodayDateString());
   const [formNotes, setFormNotes] = useState<string>('');
   const [formTotalCost, setFormTotalCost] = useState<string>('');
   const [filterAgeGroup, setFilterAgeGroup] = useState<string>('all');
+  const [filterLessonType, setFilterLessonType] = useState<string>('all');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
 
@@ -55,9 +57,11 @@ export const LessonPurchasesModal: React.FC<LessonPurchasesModalProps> = ({
   const stockBalance = totalPurchased - totalDelivered;
 
   // Filtered purchases list
-  const displayedPurchases = filterAgeGroup === 'all'
-    ? purchases
-    : purchases.filter(p => p.ageGroup === filterAgeGroup);
+  const displayedPurchases = purchases.filter(p => {
+    const matchesAge = filterAgeGroup === 'all' || p.ageGroup === filterAgeGroup;
+    const matchesType = filterLessonType === 'all' || (p.lessonType || 'Aluno') === filterLessonType;
+    return matchesAge && matchesType;
+  });
 
   const handleAddPurchase = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -88,6 +92,7 @@ export const LessonPurchasesModal: React.FC<LessonPurchasesModalProps> = ({
         quantity: qty,
         purchaseDate: formDate,
         ageGroup: formAgeGroup,
+        lessonType: formLessonType,
         notes: formNotes.trim(),
         totalCost: !isNaN(parsedCost) && parsedCost > 0 ? parsedCost : null,
         createdByUid: currentUser.uid,
@@ -95,8 +100,9 @@ export const LessonPurchasesModal: React.FC<LessonPurchasesModalProps> = ({
         createdAt: nowIso
       });
 
-      onSuccessMessage(`Lote de ${qty} lições (${formAgeGroup}) registrado com sucesso!`);
+      onSuccessMessage(`Lote de ${qty} lições (${formAgeGroup} - ${formLessonType}) registrado com sucesso!`);
       setFormQuantity('50');
+      setFormLessonType('Aluno');
       setFormNotes('');
       setFormTotalCost('');
       setFormDate(getTodayDateString());
@@ -221,7 +227,7 @@ export const LessonPurchasesModal: React.FC<LessonPurchasesModalProps> = ({
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
                   
                   {/* Tipo por Faixa Etária */}
-                  <div className="sm:col-span-2 lg:col-span-2">
+                  <div>
                     <label className="block text-[11px] font-bold text-slate-700 mb-1">
                       Tipo por Faixa Etária *
                     </label>
@@ -233,6 +239,21 @@ export const LessonPurchasesModal: React.FC<LessonPurchasesModalProps> = ({
                       {AGE_GROUPS.map(ag => (
                         <option key={ag} value={ag}>{ag}</option>
                       ))}
+                    </select>
+                  </div>
+
+                  {/* Tipo de Lição (Professor ou Aluno) */}
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                      Tipo de Lição *
+                    </label>
+                    <select
+                      value={formLessonType}
+                      onChange={(e) => setFormLessonType(e.target.value as 'Professor' | 'Aluno')}
+                      className="w-full px-3 py-2 text-xs font-semibold bg-white border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer text-slate-800"
+                    >
+                      <option value="Aluno">Aluno</option>
+                      <option value="Professor">Professor</option>
                     </select>
                   </div>
 
@@ -334,24 +355,39 @@ export const LessonPurchasesModal: React.FC<LessonPurchasesModalProps> = ({
                 </span>
               </div>
 
-              {/* Filter by Faixa Etária */}
+              {/* Filters */}
               {purchases.length > 0 && (
-                <div className="flex items-center gap-1.5 self-start sm:self-auto">
-                  <span className="text-[11px] font-semibold text-slate-500">Filtrar por Faixa:</span>
-                  <select
-                    value={filterAgeGroup}
-                    onChange={(e) => setFilterAgeGroup(e.target.value)}
-                    className="px-2.5 py-1 text-[11px] font-semibold bg-white border border-slate-200 rounded-lg text-slate-700 cursor-pointer focus:outline-none focus:ring-1 focus:ring-indigo-500"
-                  >
-                    <option value="all">Todas as Faixas ({purchases.length})</option>
-                    {AGE_GROUPS.map(ag => {
-                      const c = purchases.filter(p => p.ageGroup === ag).length;
-                      if (c === 0) return null;
-                      return (
-                        <option key={ag} value={ag}>{ag} ({c})</option>
-                      );
-                    })}
-                  </select>
+                <div className="flex flex-wrap items-center gap-2 self-start sm:self-auto">
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-[11px] font-semibold text-slate-500">Faixa:</span>
+                    <select
+                      value={filterAgeGroup}
+                      onChange={(e) => setFilterAgeGroup(e.target.value)}
+                      className="px-2.5 py-1 text-[11px] font-semibold bg-white border border-slate-200 rounded-lg text-slate-700 cursor-pointer focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                    >
+                      <option value="all">Todas ({purchases.length})</option>
+                      {AGE_GROUPS.map(ag => {
+                        const c = purchases.filter(p => p.ageGroup === ag).length;
+                        if (c === 0) return null;
+                        return (
+                          <option key={ag} value={ag}>{ag} ({c})</option>
+                        );
+                      })}
+                    </select>
+                  </div>
+
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-[11px] font-semibold text-slate-500">Tipo:</span>
+                    <select
+                      value={filterLessonType}
+                      onChange={(e) => setFilterLessonType(e.target.value)}
+                      className="px-2.5 py-1 text-[11px] font-semibold bg-white border border-slate-200 rounded-lg text-slate-700 cursor-pointer focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                    >
+                      <option value="all">Todos ({purchases.length})</option>
+                      <option value="Aluno">Aluno ({purchases.filter(p => (p.lessonType || 'Aluno') === 'Aluno').length})</option>
+                      <option value="Professor">Professor ({purchases.filter(p => p.lessonType === 'Professor').length})</option>
+                    </select>
+                  </div>
                 </div>
               )}
             </div>
@@ -376,6 +412,7 @@ export const LessonPurchasesModal: React.FC<LessonPurchasesModalProps> = ({
                       <tr>
                         <th className="py-2.5 px-3">Data</th>
                         <th className="py-2.5 px-3">Faixa Etária</th>
+                        <th className="py-2.5 px-3">Tipo</th>
                         <th className="py-2.5 px-3">Quantidade</th>
                         <th className="py-2.5 px-3">Detalhes / Trimestre</th>
                         <th className="py-2.5 px-3">Valor Total</th>
@@ -392,6 +429,15 @@ export const LessonPurchasesModal: React.FC<LessonPurchasesModalProps> = ({
                           <td className="py-2.5 px-3 whitespace-nowrap">
                             <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-bold bg-indigo-50 text-indigo-800 border border-indigo-100">
                               {purchase.ageGroup || 'Geral / Adultos'}
+                            </span>
+                          </td>
+                          <td className="py-2.5 px-3 whitespace-nowrap">
+                            <span className={`inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-bold border ${
+                              purchase.lessonType === 'Professor'
+                                ? 'bg-purple-50 text-purple-700 border-purple-200'
+                                : 'bg-blue-50 text-blue-700 border-blue-200'
+                            }`}>
+                              {purchase.lessonType || 'Aluno'}
                             </span>
                           </td>
                           <td className="py-2.5 px-3 whitespace-nowrap">

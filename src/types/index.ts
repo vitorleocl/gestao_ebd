@@ -64,6 +64,7 @@ export interface EbdClass {
 }
 
 export type LessonType = 'Adulto' | 'Aluno';
+export type LessonAudience = 'Professor' | 'Aluno';
 export type PaymentStatus = 'pago' | 'nao_pago';
 export type DeliveryStatus = 'retirado' | 'nao_retirado';
 
@@ -72,6 +73,7 @@ export interface LessonPurchase {
   quantity: number;          // Quantitativo comprado antecipadamente pela direção
   purchaseDate: string;      // Data da compra (YYYY-MM-DD)
   ageGroup?: AgeGroup | string; // Tipo por faixa Etária
+  lessonType?: 'Professor' | 'Aluno' | string; // Tipo de Lição: apenas Professor ou Aluno
   notes?: string;            // Observações / Trimestre / Detalhes
   unitCost?: number;         // Custo unitário (opcional)
   totalCost?: number;        // Custo total pago (opcional)
