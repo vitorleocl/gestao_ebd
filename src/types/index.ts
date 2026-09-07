@@ -110,6 +110,8 @@ export interface LessonOrder {
   requestedAt: string;
   paidAt?: string;
   deliveredAt?: string;
+  deliveredTo?: string; // Retirado por / Quem pegou (campo aberto e opcional)
+  pickedUpBy?: string;
   notes?: string;
   createdByUid: string;
   createdByName: string;

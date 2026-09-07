@@ -102,7 +102,7 @@ export function formatClassWhatsAppMessage(ebdClass: EbdClass, orders: LessonOrd
       text += `\n*${index + 1}. ${ord.lessonType}* (${ord.quantity} un x ${formatCurrency(unit)})\n`;
       text += `   • Total: *${formatCurrency(tot)}*\n`;
       text += `   • Pagamento: ${isPaid ? '✅ Pago' : '⏳ Pendente'}\n`;
-      text += `   • Retirada: ${isDelivered ? '📦 Retirado' : '⏳ Não Retirado'}\n`;
+      text += `   • Retirada: ${isDelivered ? '📦 Retirado' : '⏳ Não Retirado'}${isDelivered && ord.deliveredTo ? ` (Quem pegou: ${ord.deliveredTo})` : ''}\n`;
       if (ord.notes && ord.notes.trim()) {
         text += `   • Obs: ${ord.notes.trim()}\n`;
       }

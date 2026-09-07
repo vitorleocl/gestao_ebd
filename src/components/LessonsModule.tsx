@@ -25,7 +25,10 @@ import {
   Boxes,
   MessageCircle,
   Share2,
-  FileDown
+  FileDown,
+  Eye,
+  BarChart3,
+  User
 } from 'lucide-react';
 import { 
   collection, 
@@ -51,6 +54,8 @@ import { formatCurrency, formatDate, getTodayDateString } from '../utils/formatt
 import { LessonPurchasesModal } from './LessonPurchasesModal';
 import { ClassWhatsAppSummaryModal } from './ClassWhatsAppSummaryModal';
 import { GeneralLessonsSummaryModal } from './GeneralLessonsSummaryModal';
+import { LessonInventoryBreakdownModal } from './LessonInventoryBreakdownModal';
+import { LessonDeliveryModal } from './LessonDeliveryModal';
 
 interface LessonsModuleProps {
   orders: LessonOrder[];
@@ -88,6 +93,10 @@ export const LessonsModule: React.FC<LessonsModuleProps> = ({
 
   // Modal: Purchases / Lições Compradas
   const [isPurchasesModalOpen, setIsPurchasesModalOpen] = useState(false);
+  const [isInventoryBreakdownModalOpen, setIsInventoryBreakdownModalOpen] = useState(false);
+
+  // Modal: Controle de Retirada (quem pegou)
+  const [deliveryModalOrder, setDeliveryModalOrder] = useState<LessonOrder | null>(null);
 
   // Modais de Resumo de Pedidos (WhatsApp e PDF)
   const [isClassWhatsAppModalOpen, setIsClassWhatsAppModalOpen] = useState(false);
@@ -451,7 +460,7 @@ export const LessonsModule: React.FC<LessonsModuleProps> = ({
     setFormPaymentStatus('nao_pago');
     setFormDeliveryStatus('nao_retirado');
     setFormNotes('');
-    setCreateFinancialEntry(true);
+    setCreateFinancialEntry(false);
     setIsOrderModalOpen(true);
   };
 
@@ -492,23 +501,14 @@ export const LessonsModule: React.FC<LessonsModuleProps> = ({
           quantity: qty,
           unitPrice: unitPriceNum || 0,
           totalAmount: totalCalc,
-          paymentStatus: formPaymentStatus,
-          deliveryStatus: formDeliveryStatus,
           notes: formNotes.trim() || '',
           updatedAt: new Date().toISOString()
         };
 
-        if (formPaymentStatus === 'pago' && !editingOrder.paidAt) {
-          updates.paidAt = new Date().toISOString();
-        }
-        if (formDeliveryStatus === 'retirado' && !editingOrder.deliveredAt) {
-          updates.deliveredAt = new Date().toISOString();
-        }
-
         await updateDoc(docRef, updates);
         setStatusMessage({ type: 'success', text: 'Linha de pedido atualizada com sucesso!' });
       } else {
-        // New order
+        // New order (Starts as Não Pago and Não Retirado - status and pickup are defined directly in class table)
         const nowIso = new Date().toISOString();
         const payload = {
           lessonType: formLessonType,
@@ -517,39 +517,18 @@ export const LessonsModule: React.FC<LessonsModuleProps> = ({
           quantity: qty,
           unitPrice: unitPriceNum || 0,
           totalAmount: totalCalc,
-          paymentStatus: formPaymentStatus,
-          deliveryStatus: formDeliveryStatus,
+          paymentStatus: 'nao_pago',
+          deliveryStatus: 'nao_retirado',
+          deliveredTo: '',
           requestedAt: nowIso,
-          paidAt: formPaymentStatus === 'pago' ? nowIso : undefined,
-          deliveredAt: formDeliveryStatus === 'retirado' ? nowIso : undefined,
           notes: formNotes.trim() || '',
           createdByUid: currentUser.uid,
           createdByName: userProfile?.displayName || currentUser.displayName || 'Secretaria EBD',
           createdAt: nowIso
         };
 
-        const docRef = await addDoc(collection(db, 'lessonOrders'), payload);
-
-        // Optional auto-entry into Caixa de Lições if created as paid
-        if (formPaymentStatus === 'pago' && createFinancialEntry && totalCalc > 0) {
-          const transPayload = {
-            type: 'income',
-            account: 'caixa_licoes',
-            category: 'Compra de Revistas/Lições',
-            amount: totalCalc,
-            date: nowIso.split('T')[0],
-            description: `Venda de Lições (${formLessonType}) - ${selectedClass.name} (${qty} unid)`,
-            status: (isMaster || isDirigente) ? 'approved' : 'pending',
-            createdByUid: currentUser.uid,
-            createdByName: userProfile?.displayName || 'Secretaria EBD',
-            createdByEmail: currentUser.email || '',
-            createdAt: nowIso,
-            lessonOrderId: docRef.id
-          };
-          await addDoc(collection(db, 'transactions'), transPayload);
-        }
-
-        setStatusMessage({ type: 'success', text: 'Linha de lição adicionada à planilha!' });
+        await addDoc(collection(db, 'lessonOrders'), payload);
+        setStatusMessage({ type: 'success', text: 'Linha de lição lançada na planilha com sucesso!' });
         setJustCreatedOrderClass(selectedClass);
       }
 
@@ -561,6 +540,37 @@ export const LessonsModule: React.FC<LessonsModuleProps> = ({
       setStatusMessage({ type: 'error', text: 'Erro ao salvar solicitação de lição.' });
     } finally {
       setIsSubmitting(false);
+    }
+  };
+
+  // Save Delivery status & who picked up (Controle de Retirada)
+  const handleSaveDelivery = async (
+    orderId: string, 
+    deliveryStatus: DeliveryStatus, 
+    deliveredTo: string, 
+    deliveredAt?: string
+  ) => {
+    if (!currentUser) return;
+    try {
+      const orderRef = doc(db, 'lessonOrders', orderId);
+      const nowIso = new Date().toISOString();
+      await updateDoc(orderRef, {
+        deliveryStatus,
+        deliveredTo: deliveredTo.trim(),
+        deliveredAt: deliveryStatus === 'retirado' ? (deliveredAt || nowIso) : null,
+        updatedAt: nowIso
+      });
+      setStatusMessage({ 
+        type: 'success', 
+        text: deliveryStatus === 'retirado' 
+          ? `Retirada salva com sucesso${deliveredTo.trim() ? ` (por ${deliveredTo.trim()})` : ''}!` 
+          : 'Status de retirada alterado para NÃO RETIRADO.' 
+      });
+      setTimeout(() => setStatusMessage(null), 3500);
+    } catch (err: unknown) {
+      console.error("Erro ao registrar retirada:", err);
+      handleFirestoreError(err, OperationType.UPDATE, `lessonOrders/${orderId}`);
+      setStatusMessage({ type: 'error', text: 'Não foi possível salvar os dados de retirada.' });
     }
   };
 
@@ -672,6 +682,32 @@ export const LessonsModule: React.FC<LessonsModuleProps> = ({
     } catch (err: unknown) {
       console.error("Erro ao alterar retirada:", err);
       handleFirestoreError(err, OperationType.UPDATE, `lessonOrders/${order.id}`);
+    }
+  };
+
+  // Confirm delivery and who picked up (Controle de quem pegou)
+  const handleConfirmDelivery = async (orderId: string, deliveryStatus: DeliveryStatus, deliveredTo?: string) => {
+    if (!currentUser) return;
+    try {
+      const orderRef = doc(db, 'lessonOrders', orderId);
+      const nowIso = new Date().toISOString();
+      await updateDoc(orderRef, {
+        deliveryStatus,
+        deliveredTo: deliveredTo || '',
+        deliveredAt: deliveryStatus === 'retirado' ? nowIso : undefined,
+        updatedAt: nowIso
+      });
+      setStatusMessage({ 
+        type: 'success', 
+        text: deliveryStatus === 'retirado' 
+          ? `Retirada registrada!${deliveredTo ? ` (Quem pegou: ${deliveredTo})` : ''}` 
+          : 'Status alterado para NÃO RETIRADO.' 
+      });
+      setTimeout(() => setStatusMessage(null), 3500);
+    } catch (err: unknown) {
+      console.error("Erro ao alterar retirada:", err);
+      handleFirestoreError(err, OperationType.UPDATE, `lessonOrders/${orderId}`);
+      setStatusMessage({ type: 'error', text: 'Não foi possível atualizar o controle de retirada.' });
     }
   };
 
@@ -846,7 +882,7 @@ export const LessonsModule: React.FC<LessonsModuleProps> = ({
               </span>
             </div>
           </div>
-          <div className="pt-2 border-t border-slate-100">
+          <div className="pt-2 border-t border-slate-100 space-y-1.5">
             <button
               type="button"
               onClick={() => setIsPurchasesModalOpen(true)}
@@ -854,6 +890,15 @@ export const LessonsModule: React.FC<LessonsModuleProps> = ({
             >
               <PlusCircle className="w-3.5 h-3.5 text-indigo-600" />
               <span>Gerenciar Compras</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setIsInventoryBreakdownModalOpen(true)}
+              className="w-full py-1.5 px-2 text-[11px] font-bold text-indigo-900 bg-indigo-100/70 hover:bg-indigo-100 rounded-lg flex items-center justify-center gap-1.5 transition cursor-pointer"
+              title="Ver resumo de quantidade comprada por Tipo de Lição e Faixa Etária"
+            >
+              <Layers className="w-3.5 h-3.5 text-indigo-600" />
+              <span>Resumo Tipo & Faixa Etária</span>
             </button>
           </div>
         </div>
@@ -886,8 +931,16 @@ export const LessonsModule: React.FC<LessonsModuleProps> = ({
               </span>
             </div>
           </div>
-          <div className="pt-2 border-t border-slate-200/50 text-[10px] opacity-75">
-            <span>Subtraído por retirada física</span>
+          <div className="pt-2 border-t border-slate-200/50">
+            <button
+              type="button"
+              onClick={() => setIsInventoryBreakdownModalOpen(true)}
+              className="w-full py-1.5 px-2 text-[11px] font-bold bg-white/90 hover:bg-white text-slate-800 rounded-lg flex items-center justify-center gap-1.5 transition cursor-pointer shadow-2xs border border-slate-200/70"
+              title="Abrir popup com resumo detalhado de compras por tipo e faixa etária"
+            >
+              <Boxes className="w-3.5 h-3.5 text-emerald-600" />
+              <span>Ver Resumo de Estoque</span>
+            </button>
           </div>
         </div>
 
@@ -1271,9 +1324,9 @@ export const LessonsModule: React.FC<LessonsModuleProps> = ({
                         <th className="py-3 px-3 text-right">Preço Unit.</th>
                         <th className="py-3 px-3 text-right">Total Est.</th>
                         <th className="py-3 px-3 text-center">Status Pagamento</th>
-                        <th className="py-3 px-3 text-center">Status Retirada</th>
-                        <th className="py-3 px-3">Observação / Destinatário</th>
-                        <th className="py-3 px-3 w-20 text-center">Ações</th>
+                        <th className="py-3 px-3 text-center">Status Retirada (Quem Pegou)</th>
+                        <th className="py-3 px-3">Observação</th>
+                        <th className="py-3 px-3 w-28 text-center">Ações</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-200 font-sans">
@@ -1335,68 +1388,111 @@ export const LessonsModule: React.FC<LessonsModuleProps> = ({
                                 {formatCurrency(totalVal)}
                               </td>
 
-                              {/* STATUS PAGAMENTO (1-Click Toggle Pill Button) */}
+                              {/* STATUS PAGAMENTO (Botão com Ação Direta para Decidir Pagamento) */}
                               <td className="py-2.5 px-3 text-center">
                                 <button
                                   type="button"
                                   onClick={() => handleQuickTogglePayment(ord)}
-                                  className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold transition-all cursor-pointer shadow-xs border ${
+                                  className={`inline-flex flex-col items-center justify-center gap-0.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer shadow-2xs border ${
                                     isPaid
-                                      ? 'bg-emerald-100 text-emerald-800 border-emerald-300 hover:bg-emerald-200'
-                                      : 'bg-amber-100 text-amber-800 border-amber-300 hover:bg-amber-200 animate-pulse'
+                                      ? 'bg-emerald-50 text-emerald-800 border-emerald-300 hover:bg-emerald-100'
+                                      : 'bg-amber-50 text-amber-800 border-amber-300 hover:bg-amber-100'
                                   }`}
-                                  title="Clique para alternar status de pagamento"
+                                  title={isPaid ? "Clique para gerenciar ou alterar pagamento" : "Clique para registrar pagamento desta lição"}
                                 >
-                                  {isPaid ? (
-                                    <>
-                                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
-                                      <span>Pago</span>
-                                    </>
-                                  ) : (
-                                    <>
-                                      <Clock className="w-3.5 h-3.5 text-amber-600" />
-                                      <span>Não Pago</span>
-                                    </>
-                                  )}
+                                  <div className="flex items-center gap-1.5">
+                                    {isPaid ? (
+                                      <>
+                                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                                        <span>Pago</span>
+                                      </>
+                                    ) : (
+                                      <>
+                                        <Clock className="w-3.5 h-3.5 text-amber-600" />
+                                        <span>Não Pago</span>
+                                      </>
+                                    )}
+                                  </div>
+                                  <span className="text-[9px] text-slate-400 font-normal">
+                                    {isPaid && ord.paidAt ? formatDate(ord.paidAt) : 'Clique p/ alterar'}
+                                  </span>
                                 </button>
                               </td>
 
-                              {/* STATUS RETIRADA (1-Click Toggle Pill Button) */}
+                              {/* STATUS RETIRADA (Controle de quem pegou - Campo aberto e opcional) */}
                               <td className="py-2.5 px-3 text-center">
                                 <button
                                   type="button"
-                                  onClick={() => handleToggleDelivery(ord)}
-                                  className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold transition-all cursor-pointer shadow-xs border ${
+                                  onClick={() => setDeliveryModalOrder(ord)}
+                                  className={`inline-flex flex-col items-center justify-center gap-0.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer shadow-2xs border ${
                                     isDelivered
-                                      ? 'bg-blue-100 text-blue-800 border-blue-300 hover:bg-blue-200'
-                                      : 'bg-slate-100 text-slate-700 border-slate-300 hover:bg-slate-200'
+                                      ? 'bg-blue-50 text-blue-800 border-blue-300 hover:bg-blue-100'
+                                      : 'bg-slate-50 text-slate-700 border-slate-300 hover:bg-slate-100'
                                   }`}
-                                  title="Clique para alternar status de retirada (quem pegou)"
+                                  title="Clique para decidir status de retirada e registrar quem pegou"
                                 >
-                                  {isDelivered ? (
-                                    <>
-                                      <PackageCheck className="w-3.5 h-3.5 text-blue-600" />
-                                      <span>Retirado</span>
-                                    </>
+                                  <div className="flex items-center gap-1.5">
+                                    {isDelivered ? (
+                                      <>
+                                        <PackageCheck className="w-3.5 h-3.5 text-blue-600" />
+                                        <span>Retirado</span>
+                                      </>
+                                    ) : (
+                                      <>
+                                        <PackageX className="w-3.5 h-3.5 text-slate-500" />
+                                        <span>Não Retirado</span>
+                                      </>
+                                    )}
+                                  </div>
+                                  {isDelivered && (ord.deliveredTo || ord.pickedUpBy) ? (
+                                    <span className="text-[10px] text-blue-700 font-medium truncate max-w-[130px]">
+                                      👤 {ord.deliveredTo || ord.pickedUpBy}
+                                    </span>
                                   ) : (
-                                    <>
-                                      <PackageX className="w-3.5 h-3.5 text-slate-500" />
-                                      <span>Não Retirado</span>
-                                    </>
+                                    <span className="text-[9px] text-slate-400 font-normal">
+                                      {isDelivered ? 'Quem pegou: n/d' : 'Clique p/ registrar'}
+                                    </span>
                                   )}
                                 </button>
                               </td>
 
-                              {/* Observations / Person Notes */}
+                              {/* Observations / General Notes */}
                               <td className="py-2.5 px-3 text-slate-600">
                                 <span className="text-xs">
-                                  {ord.notes || <span className="text-slate-300 italic">Sem observação</span>}
+                                  {ord.notes || <span className="text-slate-300 italic">Sem anotações</span>}
                                 </span>
                               </td>
 
                               {/* Row Actions */}
                               <td className="py-2.5 px-3 text-center">
                                 <div className="flex items-center justify-center gap-1">
+                                  {/* Botão Decidir Retirada / Quem pegou */}
+                                  <button
+                                    onClick={() => setDeliveryModalOrder(ord)}
+                                    className={`p-1.5 rounded-lg transition-colors cursor-pointer ${
+                                      isDelivered 
+                                        ? 'text-blue-700 hover:bg-blue-50' 
+                                        : 'text-slate-400 hover:text-blue-600 hover:bg-blue-50'
+                                    }`}
+                                    title="Decidir retirada e quem pegou"
+                                  >
+                                    <PackageCheck className="w-3.5 h-3.5" />
+                                  </button>
+
+                                  {/* Botão Decidir Pagamento */}
+                                  <button
+                                    onClick={() => handleQuickTogglePayment(ord)}
+                                    className={`p-1.5 rounded-lg transition-colors cursor-pointer ${
+                                      isPaid 
+                                        ? 'text-emerald-700 hover:bg-emerald-50' 
+                                        : 'text-slate-400 hover:text-emerald-600 hover:bg-emerald-50'
+                                    }`}
+                                    title="Decidir pagamento (Pago / Não Pago)"
+                                  >
+                                    <CheckCircle2 className="w-3.5 h-3.5" />
+                                  </button>
+
+                                  {/* WhatsApp */}
                                   <button
                                     onClick={() => setIsClassWhatsAppModalOpen(true)}
                                     className="p-1.5 text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg transition-colors cursor-pointer"
@@ -1404,13 +1500,17 @@ export const LessonsModule: React.FC<LessonsModuleProps> = ({
                                   >
                                     <MessageCircle className="w-3.5 h-3.5" />
                                   </button>
+
+                                  {/* Editar Linha */}
                                   <button
                                     onClick={() => handleOpenEditOrder(ord)}
                                     className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors cursor-pointer"
-                                    title="Editar linha"
+                                    title="Editar quantidade ou valores"
                                   >
                                     <Edit3 className="w-3.5 h-3.5" />
                                   </button>
+
+                                  {/* Excluir Linha */}
                                   <button
                                     onClick={() => handleDeleteOrder(ord.id)}
                                     className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
@@ -1859,102 +1959,27 @@ export const LessonsModule: React.FC<LessonsModuleProps> = ({
                 </span>
               </div>
 
-              {/* Status de Pagamento Inicial */}
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1.5">
-                  Status de Pagamento
-                </label>
-                <div className="grid grid-cols-2 gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setFormPaymentStatus('pago')}
-                    className={`py-2 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 border transition-all cursor-pointer ${
-                      formPaymentStatus === 'pago'
-                        ? 'bg-emerald-50 border-emerald-500 text-emerald-800 ring-2 ring-emerald-500/20'
-                        : 'bg-slate-50 border-slate-200 text-slate-600'
-                    }`}
-                  >
-                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
-                    <span>Pago</span>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => setFormPaymentStatus('nao_pago')}
-                    className={`py-2 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 border transition-all cursor-pointer ${
-                      formPaymentStatus === 'nao_pago'
-                        ? 'bg-amber-50 border-amber-500 text-amber-800 ring-2 ring-amber-500/20'
-                        : 'bg-slate-50 border-slate-200 text-slate-600'
-                    }`}
-                  >
-                    <Clock className="w-3.5 h-3.5 text-amber-600" />
-                    <span>Não Pago</span>
-                  </button>
-                </div>
-              </div>
-
-              {/* Status de Retirada Inicial */}
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1.5">
-                  Status de Retirada (Controle de quem pegou)
-                </label>
-                <div className="grid grid-cols-2 gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setFormDeliveryStatus('retirado')}
-                    className={`py-2 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 border transition-all cursor-pointer ${
-                      formDeliveryStatus === 'retirado'
-                        ? 'bg-blue-50 border-blue-500 text-blue-800 ring-2 ring-blue-500/20'
-                        : 'bg-slate-50 border-slate-200 text-slate-600'
-                    }`}
-                  >
-                    <PackageCheck className="w-3.5 h-3.5 text-blue-600" />
-                    <span>Retirado</span>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => setFormDeliveryStatus('nao_retirado')}
-                    className={`py-2 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 border transition-all cursor-pointer ${
-                      formDeliveryStatus === 'nao_retirado'
-                        ? 'bg-slate-200 border-slate-400 text-slate-800'
-                        : 'bg-slate-50 border-slate-200 text-slate-600'
-                    }`}
-                  >
-                    <PackageX className="w-3.5 h-3.5 text-slate-400" />
-                    <span>Não Retirado</span>
-                  </button>
-                </div>
-              </div>
-
-              {/* Observação / Nome do Aluno */}
+              {/* Observações / Anotações Gerais */}
               <div>
                 <label className="block text-xs font-bold text-slate-700 mb-1">
-                  Observações / Nome de quem pegou
+                  Observações / Anotações Gerais (opcional)
                 </label>
                 <input
                   type="text"
-                  placeholder="Ex: Entregue a Carlos, Revista Professor, etc..."
+                  placeholder="Ex: Pedido para início do trimestre, reforço de classe, etc..."
                   value={formNotes}
                   onChange={(e) => setFormNotes(e.target.value)}
                   className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white"
                 />
               </div>
 
-              {/* Auto financeiro se já for pago */}
-              {formPaymentStatus === 'pago' && !editingOrder && (
-                <label className="p-3 rounded-xl bg-slate-50 border border-slate-200 flex items-center gap-2 cursor-pointer text-xs">
-                  <input
-                    type="checkbox"
-                    checked={createFinancialEntry}
-                    onChange={(e) => setCreateFinancialEntry(e.target.checked)}
-                    className="w-4 h-4 text-emerald-600 rounded border-slate-300 focus:ring-emerald-500"
-                  />
-                  <span className="text-slate-700">
-                    Lançar receita automaticamente no <strong>Caixa de Lições</strong>
-                  </span>
-                </label>
-              )}
+              {/* Informação sobre Pagamento e Retirada */}
+              <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl flex items-start gap-2.5 text-[11px] text-slate-600">
+                <AlertCircle className="w-4 h-4 text-indigo-600 shrink-0 mt-0.5" />
+                <p>
+                  <strong>Controle de Pagamento e Retirada:</strong> Após lançar este pedido, você poderá decidir o status de pagamento e registrar a retirada (informando quem pegou) diretamente nos botões da linha na planilha da classe.
+                </p>
+              </div>
 
               <div className="pt-3 border-t border-slate-100 flex items-center justify-end gap-2">
                 <button
@@ -2095,6 +2120,27 @@ export const LessonsModule: React.FC<LessonsModuleProps> = ({
         classes={classes}
         orders={orders}
         currentUserDisplayName={userProfile?.displayName || currentUser?.displayName || 'Secretaria EBD'}
+      />
+
+      {/* ========================================================
+          MODAL: RESUMO DE COMPRAS POR TIPO & FAIXA ETÁRIA
+      ======================================================== */}
+      <LessonInventoryBreakdownModal
+        isOpen={isInventoryBreakdownModalOpen}
+        onClose={() => setIsInventoryBreakdownModalOpen(false)}
+        purchases={purchases}
+        orders={orders}
+        classes={classes}
+      />
+
+      {/* ========================================================
+          MODAL: CONTROLE DE RETIRADA (QUEM PEGOU)
+      ======================================================== */}
+      <LessonDeliveryModal
+        isOpen={!!deliveryModalOrder}
+        onClose={() => setDeliveryModalOrder(null)}
+        order={deliveryModalOrder}
+        onSave={handleSaveDelivery}
       />
 
     </div>
