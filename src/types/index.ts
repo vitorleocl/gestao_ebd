@@ -68,13 +68,27 @@ export type LessonAudience = 'Professor' | 'Aluno';
 export type PaymentStatus = 'pago' | 'nao_pago';
 export type DeliveryStatus = 'retirado' | 'nao_retirado';
 
+export const LESSON_QUARTERS = [
+  '1º Trimestre',
+  '2º Trimestre',
+  '3º Trimestre',
+  '4º Trimestre',
+] as const;
+export type LessonQuarter = typeof LESSON_QUARTERS[number];
+
+export const LESSON_PURCHASE_YEARS = [
+  2026, 2027, 2028, 2029, 2030, 2031, 2032, 2033, 2034, 2035
+] as const;
+
 export interface LessonPurchase {
   id: string;
   quantity: number;          // Quantitativo comprado antecipadamente pela direção
   purchaseDate: string;      // Data da compra (YYYY-MM-DD)
   ageGroup?: AgeGroup | string; // Tipo por faixa Etária
   lessonType?: 'Professor' | 'Aluno' | string; // Tipo de Lição: apenas Professor ou Aluno
-  notes?: string;            // Observações / Trimestre / Detalhes
+  quarter?: LessonQuarter | string; // 1º Trimestre, 2º Trimestre, 3º Trimestre, 4º Trimestre
+  year?: number | string;    // Ano (2026 em diante)
+  notes?: string;            // Observações / Fornecedor / Detalhes adicionais
   unitCost?: number;         // Custo unitário (opcional)
   totalCost?: number;        // Custo total pago (opcional)
   createdByUid: string;

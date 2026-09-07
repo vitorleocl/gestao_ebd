@@ -14,7 +14,7 @@ import {
 import { collection, addDoc, deleteDoc, doc } from 'firebase/firestore';
 import { db, handleFirestoreError, OperationType } from '../firebase/config';
 import { useAuth } from '../context/AuthContext';
-import { LessonPurchase, AGE_GROUPS, AgeGroup } from '../types';
+import { LessonPurchase, AGE_GROUPS, AgeGroup, LESSON_QUARTERS, LessonQuarter, LESSON_PURCHASE_YEARS } from '../types';
 import { formatCurrency, formatDate, getTodayDateString } from '../utils/formatters';
 
 interface LessonPurchasesModalProps {
@@ -42,12 +42,15 @@ export const LessonPurchasesModal: React.FC<LessonPurchasesModalProps> = ({
 
   const [formAgeGroup, setFormAgeGroup] = useState<string>(AGE_GROUPS[9]); // Padrão: Adultos
   const [formLessonType, setFormLessonType] = useState<'Professor' | 'Aluno'>('Aluno');
+  const [formQuarter, setFormQuarter] = useState<LessonQuarter>(LESSON_QUARTERS[0]);
+  const [formYear, setFormYear] = useState<number>(2026);
   const [formQuantity, setFormQuantity] = useState<string>('50');
   const [formDate, setFormDate] = useState<string>(getTodayDateString());
   const [formNotes, setFormNotes] = useState<string>('');
   const [formTotalCost, setFormTotalCost] = useState<string>('');
   const [filterAgeGroup, setFilterAgeGroup] = useState<string>('all');
   const [filterLessonType, setFilterLessonType] = useState<string>('all');
+  const [filterQuarter, setFilterQuarter] = useState<string>('all');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
 
@@ -60,7 +63,8 @@ export const LessonPurchasesModal: React.FC<LessonPurchasesModalProps> = ({
   const displayedPurchases = purchases.filter(p => {
     const matchesAge = filterAgeGroup === 'all' || p.ageGroup === filterAgeGroup;
     const matchesType = filterLessonType === 'all' || (p.lessonType || 'Aluno') === filterLessonType;
-    return matchesAge && matchesType;
+    const matchesQuarter = filterQuarter === 'all' || (p.quarter || '1º Trimestre') === filterQuarter;
+    return matchesAge && matchesType && matchesQuarter;
   });
 
   const handleAddPurchase = async (e: React.FormEvent) => {
@@ -93,6 +97,8 @@ export const LessonPurchasesModal: React.FC<LessonPurchasesModalProps> = ({
         purchaseDate: formDate,
         ageGroup: formAgeGroup,
         lessonType: formLessonType,
+        quarter: formQuarter,
+        year: formYear,
         notes: formNotes.trim(),
         totalCost: !isNaN(parsedCost) && parsedCost > 0 ? parsedCost : null,
         createdByUid: currentUser.uid,
@@ -100,7 +106,7 @@ export const LessonPurchasesModal: React.FC<LessonPurchasesModalProps> = ({
         createdAt: nowIso
       });
 
-      onSuccessMessage(`Lote de ${qty} lições (${formAgeGroup} - ${formLessonType}) registrado com sucesso!`);
+      onSuccessMessage(`Lote de ${qty} lições (${formAgeGroup} - ${formLessonType} | ${formQuarter}/${formYear}) registrado com sucesso!`);
       setFormQuantity('50');
       setFormLessonType('Aluno');
       setFormNotes('');
@@ -288,7 +294,39 @@ export const LessonPurchasesModal: React.FC<LessonPurchasesModalProps> = ({
                   </div>
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                  {/* Trimestre */}
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                      Trimestre *
+                    </label>
+                    <select
+                      value={formQuarter}
+                      onChange={(e) => setFormQuarter(e.target.value as LessonQuarter)}
+                      className="w-full px-3 py-2 text-xs font-semibold bg-white border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer text-slate-800"
+                    >
+                      {LESSON_QUARTERS.map(q => (
+                        <option key={q} value={q}>{q}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* Ano (de 2026 em diante) */}
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                      Ano *
+                    </label>
+                    <select
+                      value={formYear}
+                      onChange={(e) => setFormYear(parseInt(e.target.value, 10))}
+                      className="w-full px-3 py-2 text-xs font-semibold bg-white border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer text-slate-800"
+                    >
+                      {LESSON_PURCHASE_YEARS.map(yr => (
+                        <option key={yr} value={yr}>{yr}</option>
+                      ))}
+                    </select>
+                  </div>
+
                   {/* Custo Total (Opcional) */}
                   <div>
                     <label className="block text-[11px] font-bold text-slate-700 mb-1">
@@ -305,16 +343,16 @@ export const LessonPurchasesModal: React.FC<LessonPurchasesModalProps> = ({
                     />
                   </div>
 
-                  {/* Detalhes / Observação */}
-                  <div className="sm:col-span-2">
+                  {/* Observação / Fornecedor */}
+                  <div>
                     <label className="block text-[11px] font-bold text-slate-700 mb-1">
-                      Trimestre / Fornecedor / Detalhes <span className="font-normal text-slate-400">(opcional)</span>
+                      Fornecedor / Observações <span className="font-normal text-slate-400">(opcional)</span>
                     </label>
                     <input
                       type="text"
                       value={formNotes}
                       onChange={(e) => setFormNotes(e.target.value)}
-                      placeholder="Ex: Revistas 3º Trimestre 2026 - CPAD"
+                      placeholder="Ex: CPAD, etc."
                       className="w-full px-3 py-2 text-xs bg-white border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500"
                     />
                   </div>
@@ -413,9 +451,10 @@ export const LessonPurchasesModal: React.FC<LessonPurchasesModalProps> = ({
                         <th className="py-2.5 px-3">Data</th>
                         <th className="py-2.5 px-3">Faixa Etária</th>
                         <th className="py-2.5 px-3">Tipo</th>
+                        <th className="py-2.5 px-3">Trimestre / Ano</th>
                         <th className="py-2.5 px-3">Quantidade</th>
-                        <th className="py-2.5 px-3">Detalhes / Trimestre</th>
                         <th className="py-2.5 px-3">Valor Total</th>
+                        <th className="py-2.5 px-3">Observações</th>
                         <th className="py-2.5 px-3">Registrado por</th>
                         {canManage && <th className="py-2.5 px-3 text-right">Ação</th>}
                       </tr>
@@ -440,16 +479,21 @@ export const LessonPurchasesModal: React.FC<LessonPurchasesModalProps> = ({
                               {purchase.lessonType || 'Aluno'}
                             </span>
                           </td>
+                          <td className="py-2.5 px-3 whitespace-nowrap font-medium text-slate-800">
+                            <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-bold bg-slate-100 text-slate-700 border border-slate-200">
+                              {purchase.quarter || '1º Trimestre'} / {purchase.year || 2026}
+                            </span>
+                          </td>
                           <td className="py-2.5 px-3 whitespace-nowrap">
                             <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-bold bg-emerald-50 text-emerald-700 border border-emerald-100">
                               +{purchase.quantity} un
                             </span>
                           </td>
-                          <td className="py-2.5 px-3 text-slate-600 max-w-xs truncate">
-                            {purchase.notes || '—'}
-                          </td>
                           <td className="py-2.5 px-3 font-medium text-slate-700 whitespace-nowrap">
                             {purchase.totalCost ? formatCurrency(purchase.totalCost) : '—'}
+                          </td>
+                          <td className="py-2.5 px-3 text-slate-600 max-w-[180px] truncate text-[11px]">
+                            {purchase.notes || '—'}
                           </td>
                           <td className="py-2.5 px-3 text-slate-500 text-[11px] whitespace-nowrap">
                             {purchase.createdByName || 'Direção'}
