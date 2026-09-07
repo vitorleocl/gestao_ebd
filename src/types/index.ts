@@ -47,7 +47,7 @@ export interface EbdClass {
   updatedAt?: string;
 }
 
-export type LessonType = 'Adulto' | 'Aluno' | string;
+export type LessonType = 'Adulto' | 'Aluno';
 export type PaymentStatus = 'pago' | 'nao_pago';
 export type DeliveryStatus = 'retirado' | 'nao_retirado';
 

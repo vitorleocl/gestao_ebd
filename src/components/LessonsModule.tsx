@@ -20,7 +20,9 @@ import {
   Check,
   ChevronRight,
   TrendingUp,
-  FileSpreadsheet
+  FileSpreadsheet,
+  ShoppingBag,
+  Boxes
 } from 'lucide-react';
 import { 
   collection, 
@@ -37,15 +39,19 @@ import {
   PaymentStatus, 
   DeliveryStatus, 
   ClassConsolidation,
-  EbdClass
+  EbdClass,
+  LessonPurchase
 } from '../types';
-import { formatCurrency, formatDate } from '../utils/formatters';
+import { formatCurrency, formatDate, getTodayDateString } from '../utils/formatters';
+import { LessonPurchasesModal } from './LessonPurchasesModal';
 
 interface LessonsModuleProps {
   orders: LessonOrder[];
   loading: boolean;
   classes: EbdClass[];
   loadingClasses: boolean;
+  purchases?: LessonPurchase[];
+  loadingPurchases?: boolean;
 }
 
 const DEFAULT_CLASS_PRESETS = [
@@ -61,9 +67,14 @@ export const LessonsModule: React.FC<LessonsModuleProps> = ({
   orders, 
   loading,
   classes,
-  loadingClasses
+  loadingClasses,
+  purchases = [],
+  loadingPurchases = false
 }) => {
   const { currentUser, userProfile, isMaster, isDirigente, isSecretaria } = useAuth();
+
+  // Modal: Purchases / Lições Compradas
+  const [isPurchasesModalOpen, setIsPurchasesModalOpen] = useState(false);
 
   // Primary active tab
   const [activeTab, setActiveTab] = useState<'classes_orders' | 'manage_classes' | 'consolidated'>('classes_orders');
@@ -304,7 +315,13 @@ export const LessonsModule: React.FC<LessonsModuleProps> = ({
     const paymentPercentage = totalRequested > 0 ? Math.round((totalPaid / totalRequested) * 100) : 0;
     const deliveryPercentage = totalRequested > 0 ? Math.round((totalDelivered / totalRequested) * 100) : 0;
 
+    const totalPurchased = purchases.reduce((acc, p) => acc + (p.quantity || 0), 0);
+    // Subtraído conforme for retirado dos pedidos (retirado fisicamente)
+    const stockRemaining = totalPurchased - totalDelivered;
+
     return {
+      totalPurchased,
+      stockRemaining,
       totalRequested,
       totalPaid,
       totalPendingPayment,
@@ -316,7 +333,7 @@ export const LessonsModule: React.FC<LessonsModuleProps> = ({
       paymentPercentage,
       deliveryPercentage
     };
-  }, [orders]);
+  }, [orders, purchases]);
 
   // Orders for the currently selected class in spreadsheet view
   const selectedClassOrders = useMemo(() => {
@@ -727,112 +744,177 @@ export const LessonsModule: React.FC<LessonsModuleProps> = ({
 
       {/* ========================================================
           RESUMO VISUAL GERENCIAL (SECRETARIA E COORDENAÇÃO EBD)
-          Cards com: Total Pedidas, Pagas, Pendentes de Retirada e A Receber
+          Cards com: Lições Compradas, Saldo em Estoque, Total Pedidas, Pagas, Pendentes de Retirada e A Receber
       ======================================================== */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-3">
         
-        {/* 1. Total de Lições Pedidas */}
-        <div className="bg-white rounded-2xl p-4.5 border border-slate-200 shadow-xs space-y-2.5">
-          <div className="flex items-center justify-between">
-            <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Total Pedidas</span>
-            <div className="w-8 h-8 rounded-xl bg-indigo-50 text-indigo-700 flex items-center justify-center font-bold">
-              <BookMarked className="w-4 h-4" />
-            </div>
-          </div>
+        {/* 1. Lições Compradas pela Direção */}
+        <div className="bg-white rounded-2xl p-4 border border-indigo-100 shadow-xs space-y-2 flex flex-col justify-between">
           <div>
-            <div className="text-2xl font-black text-slate-900 tracking-tight">
-              {overallStats.totalRequested} <span className="text-sm font-semibold text-slate-400">un</span>
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] font-bold text-indigo-700 uppercase tracking-wider">Lições Compradas</span>
+              <div className="w-7 h-7 rounded-lg bg-indigo-50 text-indigo-700 flex items-center justify-center font-bold">
+                <ShoppingBag className="w-4 h-4" />
+              </div>
+            </div>
+            <div className="mt-1">
+              <div className="text-2xl font-black text-indigo-950 tracking-tight">
+                {overallStats.totalPurchased} <span className="text-xs font-semibold text-indigo-600">un</span>
+              </div>
+              <span className="text-[10px] text-indigo-600 block mt-0.5">
+                Compradas pela Direção
+              </span>
             </div>
           </div>
-          <div className="pt-2 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500">
-            <span>{classes.length} classes registradas</span>
-            <span className="font-semibold text-slate-700">{formatCurrency(overallStats.totalAmount)}</span>
+          <div className="pt-2 border-t border-slate-100">
+            <button
+              type="button"
+              onClick={() => setIsPurchasesModalOpen(true)}
+              className="w-full py-1.5 px-2 text-[11px] font-bold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 rounded-lg flex items-center justify-center gap-1 transition cursor-pointer"
+            >
+              <PlusCircle className="w-3.5 h-3.5 text-indigo-600" />
+              <span>Gerenciar Compras</span>
+            </button>
           </div>
         </div>
 
-        {/* 2. Lições Pagas */}
-        <div className="bg-white rounded-2xl p-4.5 border border-slate-200 shadow-xs space-y-2.5">
-          <div className="flex items-center justify-between">
-            <span className="text-[11px] font-bold text-emerald-700 uppercase tracking-wider">Lições Pagas</span>
-            <div className="w-8 h-8 rounded-xl bg-emerald-50 text-emerald-700 flex items-center justify-center font-bold">
-              <CheckCircle2 className="w-4 h-4" />
+        {/* 2. Saldo Disponível em Estoque (Subtraído conforme retiradas) */}
+        <div className={`rounded-2xl p-4 border shadow-xs space-y-2 flex flex-col justify-between ${
+          overallStats.stockRemaining < 0 
+            ? 'bg-rose-50/70 border-rose-200 text-rose-950'
+            : overallStats.stockRemaining === 0 && overallStats.totalPurchased === 0
+              ? 'bg-white border-slate-200'
+              : 'bg-emerald-50/60 border-emerald-200 text-emerald-950'
+        }`}>
+          <div>
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] font-bold uppercase tracking-wider opacity-80">Saldo em Estoque</span>
+              <div className={`w-7 h-7 rounded-lg flex items-center justify-center font-bold ${
+                overallStats.stockRemaining < 0 ? 'bg-rose-100 text-rose-700' : 'bg-emerald-100 text-emerald-700'
+              }`}>
+                <Boxes className="w-4 h-4" />
+              </div>
+            </div>
+            <div className="mt-1">
+              <div className="text-2xl font-black tracking-tight">
+                {overallStats.stockRemaining} <span className="text-xs font-semibold opacity-75">un</span>
+              </div>
+              <span className="text-[10px] block mt-0.5 opacity-80 font-medium">
+                {overallStats.totalPurchased === 0 
+                  ? 'Sem compras da direção' 
+                  : `${overallStats.totalDelivered} un já retiradas`}
+              </span>
             </div>
           </div>
-          <div className="flex items-baseline justify-between">
-            <div className="text-2xl font-black text-emerald-600 tracking-tight">
-              {overallStats.totalPaid} <span className="text-sm font-semibold text-emerald-500/80">un</span>
-            </div>
-            <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
-              {overallStats.paymentPercentage}% quitado
-            </span>
+          <div className="pt-2 border-t border-slate-200/50 text-[10px] opacity-75">
+            <span>Subtraído por retirada física</span>
           </div>
-          <div className="pt-2 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500">
-            <span>Arrecadado:</span>
+        </div>
+
+        {/* 3. Total de Lições Pedidas */}
+        <div className="bg-white rounded-2xl p-4 border border-slate-200 shadow-xs space-y-2 flex flex-col justify-between">
+          <div>
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Total Pedidas</span>
+              <div className="w-7 h-7 rounded-lg bg-slate-100 text-slate-700 flex items-center justify-center font-bold">
+                <BookMarked className="w-4 h-4" />
+              </div>
+            </div>
+            <div className="mt-1">
+              <div className="text-2xl font-black text-slate-900 tracking-tight">
+                {overallStats.totalRequested} <span className="text-xs font-semibold text-slate-400">un</span>
+              </div>
+              <span className="text-[10px] text-slate-500 block mt-0.5">
+                {classes.length} classes registradas
+              </span>
+            </div>
+          </div>
+          <div className="pt-2 border-t border-slate-100 text-[10px] font-semibold text-slate-700">
+            {formatCurrency(overallStats.totalAmount)}
+          </div>
+        </div>
+
+        {/* 4. Lições Pagas */}
+        <div className="bg-white rounded-2xl p-4 border border-slate-200 shadow-xs space-y-2 flex flex-col justify-between">
+          <div>
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] font-bold text-emerald-700 uppercase tracking-wider">Lições Pagas</span>
+              <div className="w-7 h-7 rounded-lg bg-emerald-50 text-emerald-700 flex items-center justify-center font-bold">
+                <CheckCircle2 className="w-4 h-4" />
+              </div>
+            </div>
+            <div className="mt-1">
+              <div className="text-2xl font-black text-emerald-600 tracking-tight">
+                {overallStats.totalPaid} <span className="text-xs font-semibold text-emerald-500/80">un</span>
+              </div>
+              <span className="text-[10px] text-emerald-700 font-semibold block mt-0.5">
+                {overallStats.paymentPercentage}% quitado
+              </span>
+            </div>
+          </div>
+          <div className="pt-2 border-t border-slate-100 text-[10px] text-slate-500 flex justify-between">
+            <span>Quitado:</span>
             <span className="font-bold text-emerald-600">{formatCurrency(overallStats.totalPaidAmount)}</span>
           </div>
         </div>
 
-        {/* 3. Pendentes de Retirada */}
-        <div className={`rounded-2xl p-4.5 border shadow-xs space-y-2.5 ${
+        {/* 5. Pendentes de Retirada */}
+        <div className={`rounded-2xl p-4 border shadow-xs space-y-2 flex flex-col justify-between ${
           overallStats.totalPendingDelivery > 0 
             ? 'bg-amber-50/40 border-amber-200' 
             : 'bg-white border-slate-200'
         }`}>
-          <div className="flex items-center justify-between">
-            <span className={`text-[11px] font-bold uppercase tracking-wider ${
-              overallStats.totalPendingDelivery > 0 ? 'text-amber-800' : 'text-slate-500'
-            }`}>
-              Pendentes de Retirada
-            </span>
-            <div className={`w-8 h-8 rounded-xl flex items-center justify-center font-bold ${
-              overallStats.totalPendingDelivery > 0 
-                ? 'bg-amber-100 text-amber-800' 
-                : 'bg-slate-100 text-slate-600'
-            }`}>
-              <Clock className="w-4 h-4" />
+          <div>
+            <div className="flex items-center justify-between">
+              <span className={`text-[10px] font-bold uppercase tracking-wider ${
+                overallStats.totalPendingDelivery > 0 ? 'text-amber-800' : 'text-slate-500'
+              }`}>
+                A Retirar
+              </span>
+              <div className={`w-7 h-7 rounded-lg flex items-center justify-center font-bold ${
+                overallStats.totalPendingDelivery > 0 
+                  ? 'bg-amber-100 text-amber-800' 
+                  : 'bg-slate-100 text-slate-600'
+              }`}>
+                <Clock className="w-4 h-4" />
+              </div>
+            </div>
+            <div className="mt-1">
+              <div className={`text-2xl font-black tracking-tight ${
+                overallStats.totalPendingDelivery > 0 ? 'text-amber-900' : 'text-slate-900'
+              }`}>
+                {overallStats.totalPendingDelivery} <span className="text-xs font-semibold text-slate-500">un</span>
+              </div>
+              <span className="text-[10px] text-slate-500 block mt-0.5">
+                {overallStats.totalDelivered} un já entregues
+              </span>
             </div>
           </div>
-          <div className="flex items-baseline justify-between">
-            <div className={`text-2xl font-black tracking-tight ${
-              overallStats.totalPendingDelivery > 0 ? 'text-amber-900' : 'text-slate-900'
-            }`}>
-              {overallStats.totalPendingDelivery} <span className="text-sm font-semibold text-slate-500">un</span>
-            </div>
-            <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full ${
-              overallStats.totalPendingDelivery > 0
-                ? 'bg-amber-100 text-amber-800'
-                : 'bg-emerald-50 text-emerald-700 border border-emerald-200'
-            }`}>
-              {overallStats.totalPendingDelivery > 0 ? 'Aguardando entrega' : 'Todas retiradas'}
-            </span>
-          </div>
-          <div className="pt-2 border-t border-slate-200/60 flex items-center justify-between text-xs text-slate-500">
-            <span>Já entregues:</span>
-            <span className="font-semibold text-slate-700">{overallStats.totalDelivered} un ({overallStats.deliveryPercentage}%)</span>
+          <div className="pt-2 border-t border-slate-200/60 text-[10px] text-slate-500">
+            <span>{overallStats.deliveryPercentage}% retiradas</span>
           </div>
         </div>
 
-        {/* 4. A Receber / Pendente de Pagamento */}
-        <div className="bg-white rounded-2xl p-4.5 border border-slate-200 shadow-xs space-y-2.5">
-          <div className="flex items-center justify-between">
-            <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">A Receber</span>
-            <div className="w-8 h-8 rounded-xl bg-slate-100 text-slate-700 flex items-center justify-center font-bold">
-              <DollarSign className="w-4 h-4" />
+        {/* 6. A Receber / Pendente de Pagamento */}
+        <div className="bg-white rounded-2xl p-4 border border-slate-200 shadow-xs space-y-2 flex flex-col justify-between">
+          <div>
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">A Receber</span>
+              <div className="w-7 h-7 rounded-lg bg-slate-100 text-slate-700 flex items-center justify-center font-bold">
+                <DollarSign className="w-4 h-4" />
+              </div>
             </div>
-          </div>
-          <div className="flex items-baseline justify-between">
-            <div className="text-2xl font-black text-slate-800 tracking-tight">
-              {overallStats.totalPendingPayment} <span className="text-sm font-semibold text-slate-400">un</span>
-            </div>
-            {overallStats.totalPendingPayment > 0 && (
-              <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-slate-100 text-slate-700">
-                Pendente
+            <div className="mt-1">
+              <div className="text-2xl font-black text-slate-800 tracking-tight">
+                {overallStats.totalPendingPayment} <span className="text-xs font-semibold text-slate-400">un</span>
+              </div>
+              <span className="text-[10px] text-amber-700 font-semibold block mt-0.5">
+                {formatCurrency(overallStats.pendingPaymentAmount)}
               </span>
-            )}
+            </div>
           </div>
-          <div className="pt-2 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500">
-            <span>Saldo a receber:</span>
-            <span className="font-bold text-amber-700">{formatCurrency(overallStats.pendingPaymentAmount)}</span>
+          <div className="pt-2 border-t border-slate-100 text-[10px] text-slate-400">
+            <span>Cobrança das classes</span>
           </div>
         </div>
 
@@ -1554,9 +1636,6 @@ export const LessonsModule: React.FC<LessonsModuleProps> = ({
                 >
                   <option value="Adulto">Adulto</option>
                   <option value="Aluno">Aluno</option>
-                  <option value="Jovens">Jovens</option>
-                  <option value="Infantil">Infantil</option>
-                  <option value="Outro">Outro</option>
                 </select>
               </div>
 
@@ -1805,6 +1884,20 @@ export const LessonsModule: React.FC<LessonsModuleProps> = ({
           </div>
         </div>
       )}
+
+      {/* ========================================================
+          MODAL: LIÇÕES COMPRADAS PELA DIREÇÃO (ESTOQUE)
+      ======================================================== */}
+      <LessonPurchasesModal
+        isOpen={isPurchasesModalOpen}
+        onClose={() => setIsPurchasesModalOpen(false)}
+        purchases={purchases}
+        loadingPurchases={loadingPurchases}
+        totalDelivered={overallStats.totalDelivered}
+        canManage={isMaster || isDirigente || isSecretaria}
+        onSuccessMessage={(text) => setStatusMessage({ type: 'success', text })}
+        onErrorMessage={(text) => setStatusMessage({ type: 'error', text })}
+      />
 
     </div>
   );

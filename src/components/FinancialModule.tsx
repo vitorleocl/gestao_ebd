@@ -22,7 +22,8 @@ import {
   PenTool,
   CheckCircle2,
   Pencil,
-  RotateCcw
+  RotateCcw,
+  FileText
 } from 'lucide-react';
 import { 
   collection, 
@@ -44,6 +45,7 @@ import { uploadReceiptImage } from '../utils/storage';
 import { ReceiptModal } from './ReceiptModal';
 import { DigitalSignaturePad } from './DigitalSignaturePad';
 import { EditTransactionModal } from './EditTransactionModal';
+import { MonthlyReportPdfModal } from './MonthlyReportPdfModal';
 
 export const INCOME_CATEGORIES = [
   'Compra/Venda de Lições',
@@ -83,6 +85,9 @@ export const FinancialModule: React.FC<FinancialModuleProps> = ({
 
   // Edit Transaction State
   const [editingTransaction, setEditingTransaction] = useState<FinancialTransaction | null>(null);
+
+  // Monthly Financial PDF Report Modal
+  const [isPdfModalOpen, setIsPdfModalOpen] = useState(false);
 
   // New Transaction Form Modal
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -530,14 +535,26 @@ export const FinancialModule: React.FC<FinancialModuleProps> = ({
           </p>
         </div>
 
-        <button
-          id="btn-novo-lancamento"
-          onClick={() => setIsModalOpen(true)}
-          className="inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 text-white text-sm font-semibold rounded-xl shadow-sm shadow-indigo-100 transition-all cursor-pointer"
-        >
-          <PlusCircle className="w-4 h-4" />
-          <span>Novo Lançamento</span>
-        </button>
+        <div className="flex items-center gap-2.5 flex-wrap">
+          <button
+            id="btn-exportar-relatorio-pdf"
+            type="button"
+            onClick={() => setIsPdfModalOpen(true)}
+            className="inline-flex items-center justify-center gap-2 px-3.5 py-2.5 bg-white hover:bg-slate-50 active:bg-slate-100 text-slate-700 border border-slate-200 text-sm font-bold rounded-xl shadow-2xs transition-all cursor-pointer"
+          >
+            <FileText className="w-4 h-4 text-indigo-700" />
+            <span>Relatório Mensal PDF</span>
+          </button>
+
+          <button
+            id="btn-novo-lancamento"
+            onClick={() => setIsModalOpen(true)}
+            className="inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 text-white text-sm font-semibold rounded-xl shadow-sm shadow-indigo-100 transition-all cursor-pointer"
+          >
+            <PlusCircle className="w-4 h-4" />
+            <span>Novo Lançamento</span>
+          </button>
+        </div>
       </div>
 
       {/* Account Balances Cards */}
@@ -1352,6 +1369,13 @@ export const FinancialModule: React.FC<FinancialModuleProps> = ({
           setActionMessage({ type: 'success', text: msg });
           setTimeout(() => setActionMessage(null), 6000);
         }}
+      />
+
+      {/* MONTHLY REPORT PDF EXPORT MODAL */}
+      <MonthlyReportPdfModal
+        isOpen={isPdfModalOpen}
+        onClose={() => setIsPdfModalOpen(false)}
+        transactions={transactions}
       />
 
     </div>
