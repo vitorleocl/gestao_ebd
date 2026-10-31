@@ -23,7 +23,8 @@ import {
   FinancialTransaction, 
   AccountType, 
   TransactionType, 
-  TransactionStatus 
+  TransactionStatus,
+  PaymentMethod
 } from '../types';
 import { INCOME_CATEGORIES, EXPENSE_CATEGORIES } from './FinancialModule';
 import { uploadReceiptImage } from '../utils/storage';
@@ -48,6 +49,7 @@ export const EditTransactionModal: React.FC<EditTransactionModalProps> = ({
   // Form states
   const [formType, setFormType] = useState<TransactionType>('income');
   const [formAccount, setFormAccount] = useState<AccountType>('caixa_5');
+  const [formPaymentMethod, setFormPaymentMethod] = useState<PaymentMethod>('pix');
   const [formCategory, setFormCategory] = useState<string>(INCOME_CATEGORIES[0]);
   const [formAmount, setFormAmount] = useState<string>('');
   const [formDate, setFormDate] = useState<string>('');
@@ -78,6 +80,7 @@ export const EditTransactionModal: React.FC<EditTransactionModalProps> = ({
     if (transaction && isOpen) {
       setFormType(transaction.type);
       setFormAccount(transaction.account);
+      setFormPaymentMethod(transaction.paymentMethod || 'pix');
       setFormCategory(
         transaction.category || 
         (transaction.type === 'income' ? INCOME_CATEGORIES[0] : EXPENSE_CATEGORIES[0])
@@ -195,6 +198,7 @@ export const EditTransactionModal: React.FC<EditTransactionModalProps> = ({
       const updatePayload: Record<string, any> = {
         type: formType,
         account: formAccount,
+        paymentMethod: formPaymentMethod,
         category: formCategory || (formType === 'income' ? INCOME_CATEGORIES[0] : EXPENSE_CATEGORIES[0]),
         amount: amountNum,
         date: formDate,
@@ -351,6 +355,41 @@ export const EditTransactionModal: React.FC<EditTransactionModalProps> = ({
                 }`}
               >
                 <span>Caixa de Lições</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Forma de Pagamento / Meio (Pix ou Espécie) */}
+          <div>
+            <label className="block text-xs font-bold text-slate-700 mb-1.5 flex items-center justify-between">
+              <span>Forma de Pagamento (Meio) *</span>
+              <span className="text-[11px] text-slate-400 font-normal">Ajuste se o valor foi em Pix ou Espécie</span>
+            </label>
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => setFormPaymentMethod('pix')}
+                className={`py-2 px-3 rounded-xl border text-xs font-bold flex items-center justify-center gap-2 transition-all cursor-pointer ${
+                  formPaymentMethod === 'pix'
+                    ? 'bg-teal-50 border-teal-500 text-teal-800 ring-2 ring-teal-500/20 shadow-xs'
+                    : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
+                }`}
+              >
+                <span className="text-sm">💠</span>
+                <span>Pix</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setFormPaymentMethod('especie')}
+                className={`py-2 px-3 rounded-xl border text-xs font-bold flex items-center justify-center gap-2 transition-all cursor-pointer ${
+                  formPaymentMethod === 'especie'
+                    ? 'bg-emerald-50 border-emerald-500 text-emerald-800 ring-2 ring-emerald-500/20 shadow-xs'
+                    : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
+                }`}
+              >
+                <span className="text-sm">💵</span>
+                <span>Espécie (Dinheiro)</span>
               </button>
             </div>
           </div>

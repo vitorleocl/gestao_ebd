@@ -38,9 +38,10 @@ import {
   FinancialTransaction, 
   AccountType, 
   TransactionType, 
-  TransactionStatus 
+  TransactionStatus,
+  PaymentMethod
 } from '../types';
-import { formatCurrency, formatDate, getAccountName, getStatusBadge, getTodayDateString } from '../utils/formatters';
+import { formatCurrency, formatDate, getAccountName, getStatusBadge, getTodayDateString, getPaymentMethodBadge, getPaymentMethodLabel } from '../utils/formatters';
 import { uploadReceiptImage } from '../utils/storage';
 import { ReceiptModal } from './ReceiptModal';
 import { DigitalSignaturePad } from './DigitalSignaturePad';
@@ -78,6 +79,7 @@ export const FinancialModule: React.FC<FinancialModuleProps> = ({
 
   // Filters state
   const [selectedAccount, setSelectedAccount] = useState<'all' | AccountType>('all');
+  const [selectedPaymentMethod, setSelectedPaymentMethod] = useState<'all' | PaymentMethod>('all');
   const [selectedType, setSelectedType] = useState<'all' | TransactionType>('all');
   const [selectedStatus, setSelectedStatus] = useState<'all' | TransactionStatus>('all');
   const [periodFilter, setPeriodFilter] = useState<'month' | 'year' | 'all'>('all');
@@ -93,6 +95,7 @@ export const FinancialModule: React.FC<FinancialModuleProps> = ({
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [formType, setFormType] = useState<TransactionType>('income');
   const [formAccount, setFormAccount] = useState<AccountType>('caixa_5');
+  const [formPaymentMethod, setFormPaymentMethod] = useState<PaymentMethod>('pix');
   const [formCategory, setFormCategory] = useState<string>(INCOME_CATEGORIES[0]);
   const [formAmount, setFormAmount] = useState<string>('');
   const [formDate, setFormDate] = useState<string>(getTodayDateString());
@@ -193,20 +196,33 @@ export const FinancialModule: React.FC<FinancialModuleProps> = ({
         if (!matchesDesc && !matchesCreator && !matchesCategory && !matchesAmount) return false;
       }
 
+      // Payment method filter
+      if (selectedPaymentMethod !== 'all' && t.paymentMethod !== selectedPaymentMethod) return false;
+
       return true;
     }).sort((a, b) => {
       const timeA = a.date ? new Date(a.date).getTime() : 0;
       const timeB = b.date ? new Date(b.date).getTime() : 0;
       return (isNaN(timeB) ? 0 : timeB) - (isNaN(timeA) ? 0 : timeA);
     });
-  }, [transactions, selectedAccount, selectedType, selectedStatus, periodFilter, searchQuery]);
+  }, [transactions, selectedAccount, selectedPaymentMethod, selectedType, selectedStatus, periodFilter, searchQuery]);
 
   // Balance calculation (only approved transactions count for liquid balance)
   const balances = useMemo(() => {
     let incomeCaixa5 = 0;
     let expenseCaixa5 = 0;
+    let pixIncomeCaixa5 = 0;
+    let pixExpenseCaixa5 = 0;
+    let especieIncomeCaixa5 = 0;
+    let especieExpenseCaixa5 = 0;
+
     let incomeLicoes = 0;
     let expenseLicoes = 0;
+    let pixIncomeLicoes = 0;
+    let pixExpenseLicoes = 0;
+    let especieIncomeLicoes = 0;
+    let especieExpenseLicoes = 0;
+
     let pendingCount = 0;
     let pendingAmount = 0;
 
@@ -218,31 +234,62 @@ export const FinancialModule: React.FC<FinancialModuleProps> = ({
       }
       if (t.status !== 'approved') return;
 
+      const isPix = t.paymentMethod === 'pix';
+      const isEspecie = t.paymentMethod === 'especie';
+
       if (t.account === 'caixa_5') {
-        if (t.type === 'income') incomeCaixa5 += t.amount;
-        else expenseCaixa5 += t.amount;
+        if (t.type === 'income') {
+          incomeCaixa5 += t.amount;
+          if (isPix) pixIncomeCaixa5 += t.amount;
+          else if (isEspecie) especieIncomeCaixa5 += t.amount;
+        } else {
+          expenseCaixa5 += t.amount;
+          if (isPix) pixExpenseCaixa5 += t.amount;
+          else if (isEspecie) especieExpenseCaixa5 += t.amount;
+        }
       } else if (t.account === 'caixa_licoes') {
-        if (t.type === 'income') incomeLicoes += t.amount;
-        else expenseLicoes += t.amount;
+        if (t.type === 'income') {
+          incomeLicoes += t.amount;
+          if (isPix) pixIncomeLicoes += t.amount;
+          else if (isEspecie) especieIncomeLicoes += t.amount;
+        } else {
+          expenseLicoes += t.amount;
+          if (isPix) pixExpenseLicoes += t.amount;
+          else if (isEspecie) especieExpenseLicoes += t.amount;
+        }
       }
     });
 
     const balanceCaixa5 = incomeCaixa5 - expenseCaixa5;
+    const pixBalanceCaixa5 = pixIncomeCaixa5 - pixExpenseCaixa5;
+    const especieBalanceCaixa5 = especieIncomeCaixa5 - especieExpenseCaixa5;
+
     const balanceLicoes = incomeLicoes - expenseLicoes;
+    const pixBalanceLicoes = pixIncomeLicoes - pixExpenseLicoes;
+    const especieBalanceLicoes = especieIncomeLicoes - especieExpenseLicoes;
+
     const totalBalance = balanceCaixa5 + balanceLicoes;
+    const totalPixBalance = pixBalanceCaixa5 + pixBalanceLicoes;
+    const totalEspecieBalance = especieBalanceCaixa5 + especieBalanceLicoes;
 
     return {
       caixa5: {
         balance: balanceCaixa5,
         income: incomeCaixa5,
-        expense: expenseCaixa5
+        expense: expenseCaixa5,
+        pixBalance: pixBalanceCaixa5,
+        especieBalance: especieBalanceCaixa5
       },
       licoes: {
         balance: balanceLicoes,
         income: incomeLicoes,
-        expense: expenseLicoes
+        expense: expenseLicoes,
+        pixBalance: pixBalanceLicoes,
+        especieBalance: especieBalanceLicoes
       },
       totalBalance,
+      totalPixBalance,
+      totalEspecieBalance,
       pendingCount,
       pendingAmount
     };
@@ -380,6 +427,7 @@ export const FinancialModule: React.FC<FinancialModuleProps> = ({
       const payload = {
         type: formType,
         account: formAccount,
+        paymentMethod: formPaymentMethod,
         category: formCategory || (formType === 'income' ? INCOME_CATEGORIES[0] : EXPENSE_CATEGORIES[0]),
         amount: amountNum,
         date: formDate,
@@ -408,6 +456,7 @@ export const FinancialModule: React.FC<FinancialModuleProps> = ({
       // Reset form
       setFormAmount('');
       setFormDescription('');
+      setFormPaymentMethod('pix');
       setFormFile(null);
       setFilePreview(null);
       setSignatureDataUrl(null);
@@ -433,6 +482,48 @@ export const FinancialModule: React.FC<FinancialModuleProps> = ({
       }
     } finally {
       setIsSubmitting(false);
+    }
+  };
+
+  // Quick toggle payment method between Pix and Espécie
+  const handleQuickTogglePaymentMethod = async (t: FinancialTransaction) => {
+    if (!currentUser) return;
+    const currentMethod = t.paymentMethod || 'pix';
+    const nextMethod: PaymentMethod = currentMethod === 'pix' ? 'especie' : 'pix';
+    setActionLoadingId(t.id);
+    try {
+      const docRef = doc(db, 'transactions', t.id);
+      await updateDoc(docRef, {
+        paymentMethod: nextMethod,
+        updatedAt: new Date().toISOString()
+      });
+
+      // If tied to a lesson order, synchronize
+      if (t.lessonOrderId) {
+        try {
+          await updateDoc(doc(db, 'lessonOrders', t.lessonOrderId), {
+            paymentMethod: nextMethod,
+            updatedAt: new Date().toISOString()
+          });
+        } catch {
+          // non-critical
+        }
+      }
+
+      setActionMessage({
+        type: 'success',
+        text: `Forma de pagamento alterada para ${nextMethod === 'pix' ? 'Pix' : 'Espécie'}!`
+      });
+      setTimeout(() => setActionMessage(null), 3500);
+    } catch (err: unknown) {
+      console.error("Erro ao alterar forma de pagamento:", err);
+      handleFirestoreError(err, OperationType.UPDATE, `transactions/${t.id}`);
+      setActionMessage({
+        type: 'error',
+        text: 'Não foi possível alterar a forma de pagamento.'
+      });
+    } finally {
+      setActionLoadingId(null);
     }
   };
 
@@ -578,7 +669,30 @@ export const FinancialModule: React.FC<FinancialModuleProps> = ({
               {formatCurrency(balances.caixa5.balance)}
             </div>
           </div>
-          <div className="pt-2 border-t border-slate-100 grid grid-cols-2 text-xs">
+
+          {/* Sub-breakdown Pix & Espécie */}
+          <div className="pt-2 pb-0.5 border-t border-slate-100 grid grid-cols-2 gap-2 text-xs">
+            <div className="bg-teal-50/70 border border-teal-100 p-1.5 rounded-xl">
+              <div className="text-[10px] text-teal-800 font-bold flex items-center gap-1">
+                <span>💠</span>
+                <span>Pix:</span>
+              </div>
+              <div className="font-bold text-slate-900 text-xs font-mono mt-0.5">
+                {formatCurrency(balances.caixa5.pixBalance)}
+              </div>
+            </div>
+            <div className="bg-emerald-50/70 border border-emerald-100 p-1.5 rounded-xl">
+              <div className="text-[10px] text-emerald-800 font-bold flex items-center gap-1">
+                <span>💵</span>
+                <span>Espécie:</span>
+              </div>
+              <div className="font-bold text-slate-900 text-xs font-mono mt-0.5">
+                {formatCurrency(balances.caixa5.especieBalance)}
+              </div>
+            </div>
+          </div>
+
+          <div className="pt-1 border-t border-slate-100 grid grid-cols-2 text-xs">
             <div className="text-slate-500">
               <span className="block text-[11px]">Entradas:</span>
               <span className="font-semibold text-emerald-600">+{formatCurrency(balances.caixa5.income)}</span>
@@ -608,7 +722,30 @@ export const FinancialModule: React.FC<FinancialModuleProps> = ({
               {formatCurrency(balances.licoes.balance)}
             </div>
           </div>
-          <div className="pt-2 border-t border-slate-100 grid grid-cols-2 text-xs">
+
+          {/* Sub-breakdown Pix & Espécie */}
+          <div className="pt-2 pb-0.5 border-t border-slate-100 grid grid-cols-2 gap-2 text-xs">
+            <div className="bg-teal-50/70 border border-teal-100 p-1.5 rounded-xl">
+              <div className="text-[10px] text-teal-800 font-bold flex items-center gap-1">
+                <span>💠</span>
+                <span>Pix:</span>
+              </div>
+              <div className="font-bold text-slate-900 text-xs font-mono mt-0.5">
+                {formatCurrency(balances.licoes.pixBalance)}
+              </div>
+            </div>
+            <div className="bg-emerald-50/70 border border-emerald-100 p-1.5 rounded-xl">
+              <div className="text-[10px] text-emerald-800 font-bold flex items-center gap-1">
+                <span>💵</span>
+                <span>Espécie:</span>
+              </div>
+              <div className="font-bold text-slate-900 text-xs font-mono mt-0.5">
+                {formatCurrency(balances.licoes.especieBalance)}
+              </div>
+            </div>
+          </div>
+
+          <div className="pt-1 border-t border-slate-100 grid grid-cols-2 text-xs">
             <div className="text-slate-500">
               <span className="block text-[11px]">Entradas:</span>
               <span className="font-semibold text-emerald-600">+{formatCurrency(balances.licoes.income)}</span>
@@ -638,7 +775,30 @@ export const FinancialModule: React.FC<FinancialModuleProps> = ({
               {formatCurrency(balances.totalBalance)}
             </div>
           </div>
-          <div className="pt-2 border-t border-white/10 flex items-center justify-between text-xs text-indigo-200">
+
+          {/* Sub-breakdown Pix & Espécie Total */}
+          <div className="pt-2 pb-0.5 border-t border-white/10 grid grid-cols-2 gap-2 text-xs">
+            <div className="bg-white/10 border border-white/10 p-1.5 rounded-xl">
+              <div className="text-[10px] text-teal-200 font-bold flex items-center gap-1">
+                <span>💠</span>
+                <span>Total Pix:</span>
+              </div>
+              <div className="font-bold text-white text-xs font-mono mt-0.5">
+                {formatCurrency(balances.totalPixBalance)}
+              </div>
+            </div>
+            <div className="bg-white/10 border border-white/10 p-1.5 rounded-xl">
+              <div className="text-[10px] text-emerald-200 font-bold flex items-center gap-1">
+                <span>💵</span>
+                <span>Total Espécie:</span>
+              </div>
+              <div className="font-bold text-white text-xs font-mono mt-0.5">
+                {formatCurrency(balances.totalEspecieBalance)}
+              </div>
+            </div>
+          </div>
+
+          <div className="pt-1 border-t border-white/10 flex items-center justify-between text-xs text-indigo-200">
             <span>Aguardando Validação:</span>
             <span className="font-bold text-amber-300">{formatCurrency(balances.pendingAmount)}</span>
           </div>
@@ -649,44 +809,84 @@ export const FinancialModule: React.FC<FinancialModuleProps> = ({
       {/* Filter Toolbar */}
       <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs space-y-3">
         
-        {/* Account Tabs */}
-        <div className="flex flex-wrap items-center gap-2 border-b border-slate-100 pb-3">
-          <button
-            onClick={() => setSelectedAccount('all')}
-            className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
-              selectedAccount === 'all'
-                ? 'bg-slate-900 text-white shadow-xs'
-                : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-            }`}
-          >
-            Todos os Caixas
-          </button>
-          <button
-            onClick={() => setSelectedAccount('caixa_5')}
-            className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
-              selectedAccount === 'caixa_5'
-                ? 'bg-indigo-600 text-white shadow-xs'
-                : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-            }`}
-          >
-            Caixa 5%
-          </button>
-          <button
-            onClick={() => setSelectedAccount('caixa_licoes')}
-            className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
-              selectedAccount === 'caixa_licoes'
-                ? 'bg-emerald-600 text-white shadow-xs'
-                : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-            }`}
-          >
-            Caixa de Lições
-          </button>
+        {/* Account Tabs & Payment Method Selector */}
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-3">
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              onClick={() => setSelectedAccount('all')}
+              className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                selectedAccount === 'all'
+                  ? 'bg-slate-900 text-white shadow-xs'
+                  : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+              }`}
+            >
+              Todos os Caixas
+            </button>
+            <button
+              onClick={() => setSelectedAccount('caixa_5')}
+              className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                selectedAccount === 'caixa_5'
+                  ? 'bg-indigo-600 text-white shadow-xs'
+                  : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+              }`}
+            >
+              Caixa 5%
+            </button>
+            <button
+              onClick={() => setSelectedAccount('caixa_licoes')}
+              className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                selectedAccount === 'caixa_licoes'
+                  ? 'bg-emerald-600 text-white shadow-xs'
+                  : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+              }`}
+            >
+              Caixa de Lições
+            </button>
+          </div>
+
+          {/* Payment Method filter pills */}
+          <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl">
+            <span className="text-[10px] font-bold text-slate-500 uppercase px-1 hidden sm:inline">Meio:</span>
+            <button
+              type="button"
+              onClick={() => setSelectedPaymentMethod('all')}
+              className={`px-2.5 py-1 text-xs font-semibold rounded-lg transition-all cursor-pointer ${
+                selectedPaymentMethod === 'all'
+                  ? 'bg-white text-slate-900 shadow-2xs font-bold'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              Todos
+            </button>
+            <button
+              type="button"
+              onClick={() => setSelectedPaymentMethod('pix')}
+              className={`px-2.5 py-1 text-xs font-semibold rounded-lg transition-all cursor-pointer flex items-center gap-1 ${
+                selectedPaymentMethod === 'pix'
+                  ? 'bg-teal-600 text-white shadow-2xs font-bold'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              <span>💠 Pix</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setSelectedPaymentMethod('especie')}
+              className={`px-2.5 py-1 text-xs font-semibold rounded-lg transition-all cursor-pointer flex items-center gap-1 ${
+                selectedPaymentMethod === 'especie'
+                  ? 'bg-emerald-600 text-white shadow-2xs font-bold'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              <span>💵 Espécie</span>
+            </button>
+          </div>
 
           {/* Pending only quick pill */}
           {balances.pendingCount > 0 && (
             <button
               onClick={() => setSelectedStatus(selectedStatus === 'pending' ? 'all' : 'pending')}
-              className={`ml-auto px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
                 selectedStatus === 'pending'
                   ? 'bg-amber-600 text-white'
                   : 'bg-amber-100 text-amber-900 hover:bg-amber-200 border border-amber-300'
@@ -845,6 +1045,23 @@ export const FinancialModule: React.FC<FinancialModuleProps> = ({
                         }`}>
                           {getAccountName(t.account)}
                         </span>
+
+                        {/* Payment Method Badge (com clique rápido para alternar Pix e Espécie) */}
+                        {(() => {
+                          const pm = getPaymentMethodBadge(t.paymentMethod);
+                          return (
+                            <button
+                              type="button"
+                              onClick={() => handleQuickTogglePaymentMethod(t)}
+                              title={`Forma: ${pm.label}. Clique para alternar entre Pix e Espécie`}
+                              className={`text-[10px] font-bold px-2 py-0.5 rounded-full border flex items-center gap-1 transition-all cursor-pointer hover:shadow-2xs ${pm.bg} ${pm.color} ${pm.border}`}
+                            >
+                              <span>{pm.icon}</span>
+                              <span>{pm.label}</span>
+                              <span className="text-[9px] opacity-60">⇄</span>
+                            </button>
+                          );
+                        })()}
 
                         {/* Category Badge */}
                         {t.category && (
@@ -1080,6 +1297,47 @@ export const FinancialModule: React.FC<FinancialModuleProps> = ({
                   >
                     <div className="text-xs font-bold text-emerald-950">Caixa de Lições</div>
                     <div className="text-[11px] text-slate-500">Venda e compra de revistas</div>
+                  </button>
+                </div>
+              </div>
+
+              {/* Forma de Pagamento / Meio (Pix ou Espécie) */}
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1.5 flex items-center justify-between">
+                  <span>Forma de Pagamento (Meio) *</span>
+                  <span className="text-[11px] text-slate-400 font-normal">Ajuste se o valor é Pix ou Espécie</span>
+                </label>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setFormPaymentMethod('pix')}
+                    className={`p-3 rounded-xl text-left border transition-all cursor-pointer flex items-center gap-2.5 ${
+                      formPaymentMethod === 'pix'
+                        ? 'bg-teal-50 border-teal-500 ring-2 ring-teal-500/20 shadow-xs'
+                        : 'bg-slate-50 border-slate-200 hover:bg-slate-100'
+                    }`}
+                  >
+                    <span className="text-xl">💠</span>
+                    <div>
+                      <div className="text-xs font-bold text-teal-950">Pix</div>
+                      <div className="text-[10px] text-slate-500">Transferência bancária</div>
+                    </div>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setFormPaymentMethod('especie')}
+                    className={`p-3 rounded-xl text-left border transition-all cursor-pointer flex items-center gap-2.5 ${
+                      formPaymentMethod === 'especie'
+                        ? 'bg-emerald-50 border-emerald-500 ring-2 ring-emerald-500/20 shadow-xs'
+                        : 'bg-slate-50 border-slate-200 hover:bg-slate-100'
+                    }`}
+                  >
+                    <span className="text-xl">💵</span>
+                    <div>
+                      <div className="text-xs font-bold text-emerald-950">Espécie</div>
+                      <div className="text-[10px] text-slate-500">Dinheiro em mãos</div>
+                    </div>
                   </button>
                 </div>
               </div>

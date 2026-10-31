@@ -48,9 +48,10 @@ import {
   EbdClass,
   LessonPurchase,
   AGE_GROUPS,
-  AgeGroup
+  AgeGroup,
+  PaymentMethod
 } from '../types';
-import { formatCurrency, formatDate, getTodayDateString } from '../utils/formatters';
+import { formatCurrency, formatDate, getTodayDateString, getPaymentMethodBadge } from '../utils/formatters';
 import { LessonPurchasesModal } from './LessonPurchasesModal';
 import { ClassWhatsAppSummaryModal } from './ClassWhatsAppSummaryModal';
 import { GeneralLessonsSummaryModal } from './GeneralLessonsSummaryModal';
@@ -139,6 +140,7 @@ export const LessonsModule: React.FC<LessonsModuleProps> = ({
   const [payModalOrder, setPayModalOrder] = useState<LessonOrder | null>(null);
   const [payAutoGenerateCashEntry, setPayAutoGenerateCashEntry] = useState<boolean>(true);
   const [payAmount, setPayAmount] = useState<string>('');
+  const [payPaymentMethod, setPayPaymentMethod] = useState<PaymentMethod>('pix');
 
   // Status message notification
   const [statusMessage, setStatusMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
@@ -582,6 +584,7 @@ export const LessonsModule: React.FC<LessonsModuleProps> = ({
       setPayModalOrder(order);
       const estimated = order.totalAmount || (order.unitPrice ? order.unitPrice * order.quantity : order.quantity * 15);
       setPayAmount(estimated.toString());
+      setPayPaymentMethod(order.paymentMethod || 'pix');
       setPayAutoGenerateCashEntry(true);
     } else {
       // Toggle from pago back to nao_pago
@@ -600,6 +603,28 @@ export const LessonsModule: React.FC<LessonsModuleProps> = ({
     }
   };
 
+  // Quick toggle order payment method between Pix and Espécie
+  const handleQuickToggleOrderPaymentMethod = async (order: LessonOrder) => {
+    if (!currentUser) return;
+    const current = order.paymentMethod || 'pix';
+    const nextMethod: PaymentMethod = current === 'pix' ? 'especie' : 'pix';
+    try {
+      await updateDoc(doc(db, 'lessonOrders', order.id), {
+        paymentMethod: nextMethod,
+        updatedAt: new Date().toISOString()
+      });
+
+      setStatusMessage({
+        type: 'success',
+        text: `Forma de pagamento da lição alterada para ${nextMethod === 'pix' ? 'Pix' : 'Espécie'}!`
+      });
+      setTimeout(() => setStatusMessage(null), 3000);
+    } catch (err: unknown) {
+      console.error("Erro ao alterar forma de pagamento da lição:", err);
+      handleFirestoreError(err, OperationType.UPDATE, `lessonOrders/${order.id}`);
+    }
+  };
+
   // Confirm Payment & Auto Financial Entry into Caixa de Lições
   const handleConfirmPayment = async () => {
     if (!payModalOrder || !currentUser) return;
@@ -614,9 +639,10 @@ export const LessonsModule: React.FC<LessonsModuleProps> = ({
         ? parsedAmount 
         : (payModalOrder.totalAmount || payModalOrder.quantity * 15);
 
-      // 1. Update lesson order status to 'pago'
+      // 1. Update lesson order status to 'pago' with chosen payment method
       await updateDoc(orderRef, {
         paymentStatus: 'pago',
+        paymentMethod: payPaymentMethod,
         paidAt: nowIso,
         totalAmount: finalAmount,
         updatedAt: nowIso
@@ -629,8 +655,9 @@ export const LessonsModule: React.FC<LessonsModuleProps> = ({
           account: 'caixa_licoes',
           category: 'Compra de Revistas/Lições',
           amount: finalAmount,
+          paymentMethod: payPaymentMethod,
           date: nowIso.split('T')[0],
-          description: `Pagamento de Lições: ${payModalOrder.className} (${payModalOrder.quantity}x ${payModalOrder.lessonType})`,
+          description: `Pagamento de Lições (${payPaymentMethod === 'pix' ? 'Pix' : 'Espécie'}): ${payModalOrder.className} (${payModalOrder.quantity}x ${payModalOrder.lessonType})`,
           status: (isMaster || isDirigente) ? 'approved' : 'pending',
           createdByUid: currentUser.uid,
           createdByName: userProfile?.displayName || currentUser.displayName || 'Secretaria EBD',
@@ -649,7 +676,7 @@ export const LessonsModule: React.FC<LessonsModuleProps> = ({
 
       setStatusMessage({ 
         type: 'success', 
-        text: `Lições da ${payModalOrder.className} marcadas como PAGAS${payAutoGenerateCashEntry ? ' e lançadas no Caixa de Lições' : ''}!` 
+        text: `Lições da ${payModalOrder.className} marcadas como PAGAS (${payPaymentMethod === 'pix' ? 'Pix' : 'Espécie'})${payAutoGenerateCashEntry ? ' e lançadas no Caixa de Lições' : ''}!` 
       });
       setPayModalOrder(null);
       setTimeout(() => setStatusMessage(null), 4000);
@@ -1416,6 +1443,25 @@ export const LessonsModule: React.FC<LessonsModuleProps> = ({
                                   <span className="text-[9px] text-slate-400 font-normal">
                                     {isPaid && ord.paidAt ? formatDate(ord.paidAt) : 'Clique p/ alterar'}
                                   </span>
+
+                                  {isPaid && (
+                                    <button
+                                      type="button"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        handleQuickToggleOrderPaymentMethod(ord);
+                                      }}
+                                      title={`Forma: ${ord.paymentMethod === 'especie' ? 'Espécie' : 'Pix'}. Clique para alternar entre Pix e Espécie`}
+                                      className={`mt-1 inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold border transition-all cursor-pointer hover:scale-105 active:scale-95 shadow-2xs ${
+                                        ord.paymentMethod === 'especie'
+                                          ? 'bg-emerald-100 text-emerald-800 border-emerald-300'
+                                          : 'bg-teal-100 text-teal-800 border-teal-300'
+                                      }`}
+                                    >
+                                      <span>{ord.paymentMethod === 'especie' ? '💵 Espécie' : '💠 Pix'}</span>
+                                      <span className="text-[9px] opacity-60">⇄</span>
+                                    </button>
+                                  )}
                                 </button>
                               </td>
 
@@ -2042,6 +2088,40 @@ export const LessonsModule: React.FC<LessonsModuleProps> = ({
                     onChange={(e) => setPayAmount(e.target.value)}
                     className="w-full pl-9 pr-3 py-2 text-sm font-bold bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500"
                   />
+                </div>
+              </div>
+
+              {/* Forma de Pagamento (Pix ou Espécie) */}
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  Forma de Pagamento (Meio) *
+                </label>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setPayPaymentMethod('pix')}
+                    className={`py-2 px-3 rounded-xl border text-xs font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+                      payPaymentMethod === 'pix'
+                        ? 'bg-teal-50 border-teal-500 text-teal-800 ring-2 ring-teal-500/20 shadow-xs'
+                        : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100'
+                    }`}
+                  >
+                    <span>💠</span>
+                    <span>Pix</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setPayPaymentMethod('especie')}
+                    className={`py-2 px-3 rounded-xl border text-xs font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+                      payPaymentMethod === 'especie'
+                        ? 'bg-emerald-50 border-emerald-500 text-emerald-800 ring-2 ring-emerald-500/20 shadow-xs'
+                        : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100'
+                    }`}
+                  >
+                    <span>💵</span>
+                    <span>Espécie (Dinheiro)</span>
+                  </button>
                 </div>
               </div>
 

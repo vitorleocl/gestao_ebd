@@ -315,11 +315,13 @@ export function generateMonthlyFinancialReportPdf({
   const transactionTableRows = monthTransactions.map(t => {
     const isInc = t.type === 'income';
     const accLabel = t.account === 'caixa_5' ? 'Caixa 5%' : 'Lições';
+    const methodLabel = t.paymentMethod === 'pix' ? 'Pix' : t.paymentMethod === 'especie' ? 'Espécie' : '—';
     const valFormatted = `${isInc ? '+' : '-'} ${formatCurrency(t.amount)}`;
     return [
       formatDate(t.date),
       isInc ? 'Entrada' : 'Saída',
       accLabel,
+      methodLabel,
       t.category || 'Geral',
       t.description || '—',
       valFormatted
@@ -327,12 +329,12 @@ export function generateMonthlyFinancialReportPdf({
   });
 
   if (transactionTableRows.length === 0) {
-    transactionTableRows.push(['—', '—', '—', 'Nenhum lançamento no período', '—', 'R$ 0,00']);
+    transactionTableRows.push(['—', '—', '—', '—', 'Nenhum lançamento no período', '—', 'R$ 0,00']);
   }
 
   autoTable(doc, {
     startY: currentY,
-    head: [['Data', 'Tipo', 'Caixa', 'Categoria', 'Descrição / Histórico', 'Valor (R$)']],
+    head: [['Data', 'Tipo', 'Caixa', 'Meio', 'Categoria', 'Descrição / Histórico', 'Valor (R$)']],
     body: transactionTableRows,
     theme: 'striped',
     headStyles: {
@@ -350,12 +352,13 @@ export function generateMonthlyFinancialReportPdf({
       fillColor: [248, 250, 252]
     },
     columnStyles: {
-      0: { cellWidth: 20 },
-      1: { cellWidth: 18, fontStyle: 'bold' },
-      2: { cellWidth: 22 },
-      3: { cellWidth: 38 },
-      4: { cellWidth: 58 },
-      5: { cellWidth: 32, halign: 'right', fontStyle: 'bold' }
+      0: { cellWidth: 18 },
+      1: { cellWidth: 16, fontStyle: 'bold' },
+      2: { cellWidth: 18 },
+      3: { cellWidth: 16 },
+      4: { cellWidth: 34 },
+      5: { cellWidth: 56 },
+      6: { cellWidth: 30, halign: 'right', fontStyle: 'bold' }
     },
     didParseCell: (data) => {
       if (data.section === 'body' && data.column.index === 1) {

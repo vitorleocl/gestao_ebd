@@ -91,3 +91,42 @@ export const getStatusBadge = (status: TransactionStatus): { label: string; colo
       return { label: status, color: 'text-slate-700', bg: 'bg-slate-50', border: 'border-slate-200' };
   }
 };
+
+export const getPaymentMethodBadge = (
+  method?: string | null
+): { label: string; icon: string; color: string; bg: string; border: string; shortLabel: string } => {
+  if (method === 'pix') {
+    return {
+      label: 'Pix',
+      shortLabel: 'Pix',
+      icon: '💠',
+      color: 'text-teal-800',
+      bg: 'bg-teal-50',
+      border: 'border-teal-200'
+    };
+  }
+  if (method === 'especie') {
+    return {
+      label: 'Espécie',
+      shortLabel: 'Espécie',
+      icon: '💵',
+      color: 'text-emerald-800',
+      bg: 'bg-emerald-50',
+      border: 'border-emerald-200'
+    };
+  }
+  return {
+    label: 'Não informado',
+    shortLabel: '—',
+    icon: '💰',
+    color: 'text-slate-600',
+    bg: 'bg-slate-50',
+    border: 'border-slate-200'
+  };
+};
+
+export const getPaymentMethodLabel = (method?: string | null): string => {
+  if (method === 'pix') return 'Pix';
+  if (method === 'especie') return 'Espécie';
+  return 'Não informado';
+};

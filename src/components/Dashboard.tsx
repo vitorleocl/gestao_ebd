@@ -27,8 +27,8 @@ import {
   ResponsiveContainer 
 } from 'recharts';
 import { useAuth } from '../context/AuthContext';
-import { FinancialTransaction, LessonOrder, LessonPurchase } from '../types';
-import { formatCurrency, formatDate, getAccountName, getStatusBadge } from '../utils/formatters';
+import { FinancialTransaction, LessonOrder, LessonPurchase, PaymentMethod } from '../types';
+import { formatCurrency, formatDate, getAccountName, getStatusBadge, getPaymentMethodBadge } from '../utils/formatters';
 
 interface DashboardProps {
   transactions: FinancialTransaction[];
@@ -47,12 +47,27 @@ export const Dashboard: React.FC<DashboardProps> = ({
 }) => {
   const { userProfile, isMaster, isDirigente, isSecretaria, isTesouraria } = useAuth();
 
+  // Payment method filter: All, Pix or Espécie
+  const [paymentMethodFilter, setPaymentMethodFilter] = useState<'all' | 'pix' | 'especie'>('all');
+
   // Financial metrics
   const financialSummary = useMemo(() => {
-    let incomeCaixa5 = 0;
-    let expenseCaixa5 = 0;
-    let incomeLicoes = 0;
-    let expenseLicoes = 0;
+    // Caixa 5%
+    let incomeCaixa5Total = 0;
+    let expenseCaixa5Total = 0;
+    let incomeCaixa5Pix = 0;
+    let expenseCaixa5Pix = 0;
+    let incomeCaixa5Especie = 0;
+    let expenseCaixa5Especie = 0;
+
+    // Caixa de Lições
+    let incomeLicoesTotal = 0;
+    let expenseLicoesTotal = 0;
+    let incomeLicoesPix = 0;
+    let expenseLicoesPix = 0;
+    let incomeLicoesEspecie = 0;
+    let expenseLicoesEspecie = 0;
+
     let pendingCount = 0;
     let pendingAmount = 0;
 
@@ -64,30 +79,81 @@ export const Dashboard: React.FC<DashboardProps> = ({
       }
       if (t.status !== 'approved') return;
 
+      const isPix = t.paymentMethod === 'pix';
+      const isEspecie = t.paymentMethod === 'especie';
+
       if (t.account === 'caixa_5') {
-        if (t.type === 'income') incomeCaixa5 += t.amount;
-        else expenseCaixa5 += t.amount;
+        if (t.type === 'income') {
+          incomeCaixa5Total += t.amount;
+          if (isPix) incomeCaixa5Pix += t.amount;
+          else if (isEspecie) incomeCaixa5Especie += t.amount;
+        } else {
+          expenseCaixa5Total += t.amount;
+          if (isPix) expenseCaixa5Pix += t.amount;
+          else if (isEspecie) expenseCaixa5Especie += t.amount;
+        }
       } else if (t.account === 'caixa_licoes') {
-        if (t.type === 'income') incomeLicoes += t.amount;
-        else expenseLicoes += t.amount;
+        if (t.type === 'income') {
+          incomeLicoesTotal += t.amount;
+          if (isPix) incomeLicoesPix += t.amount;
+          else if (isEspecie) incomeLicoesEspecie += t.amount;
+        } else {
+          expenseLicoesTotal += t.amount;
+          if (isPix) expenseLicoesPix += t.amount;
+          else if (isEspecie) expenseLicoesEspecie += t.amount;
+        }
       }
     });
 
-    const balanceCaixa5 = incomeCaixa5 - expenseCaixa5;
-    const balanceLicoes = incomeLicoes - expenseLicoes;
+    const balanceCaixa5Total = incomeCaixa5Total - expenseCaixa5Total;
+    const balanceCaixa5Pix = incomeCaixa5Pix - expenseCaixa5Pix;
+    const balanceCaixa5Especie = incomeCaixa5Especie - expenseCaixa5Especie;
+
+    const balanceLicoesTotal = incomeLicoesTotal - expenseLicoesTotal;
+    const balanceLicoesPix = incomeLicoesPix - expenseLicoesPix;
+    const balanceLicoesEspecie = incomeLicoesEspecie - expenseLicoesEspecie;
+
+    const totalBalance = balanceCaixa5Total + balanceLicoesTotal;
+    const totalPixBalance = balanceCaixa5Pix + balanceLicoesPix;
+    const totalEspecieBalance = balanceCaixa5Especie + balanceLicoesEspecie;
 
     return {
-      balanceCaixa5,
-      incomeCaixa5,
-      expenseCaixa5,
-      balanceLicoes,
-      incomeLicoes,
-      expenseLicoes,
-      totalBalance: balanceCaixa5 + balanceLicoes,
+      caixa5: {
+        total: { balance: balanceCaixa5Total, income: incomeCaixa5Total, expense: expenseCaixa5Total },
+        pix: { balance: balanceCaixa5Pix, income: incomeCaixa5Pix, expense: expenseCaixa5Pix },
+        especie: { balance: balanceCaixa5Especie, income: incomeCaixa5Especie, expense: expenseCaixa5Especie }
+      },
+      licoes: {
+        total: { balance: balanceLicoesTotal, income: incomeLicoesTotal, expense: expenseLicoesTotal },
+        pix: { balance: balanceLicoesPix, income: incomeLicoesPix, expense: expenseLicoesPix },
+        especie: { balance: balanceLicoesEspecie, income: incomeLicoesEspecie, expense: expenseLicoesEspecie }
+      },
+      totalBalance,
+      totalPixBalance,
+      totalEspecieBalance,
       pendingCount,
       pendingAmount
     };
   }, [transactions]);
+
+  // Active view metrics based on filter
+  const currentCaixa5 = useMemo(() => {
+    if (paymentMethodFilter === 'pix') return financialSummary.caixa5.pix;
+    if (paymentMethodFilter === 'especie') return financialSummary.caixa5.especie;
+    return financialSummary.caixa5.total;
+  }, [financialSummary, paymentMethodFilter]);
+
+  const currentLicoes = useMemo(() => {
+    if (paymentMethodFilter === 'pix') return financialSummary.licoes.pix;
+    if (paymentMethodFilter === 'especie') return financialSummary.licoes.especie;
+    return financialSummary.licoes.total;
+  }, [financialSummary, paymentMethodFilter]);
+
+  const currentTotalBalance = useMemo(() => {
+    if (paymentMethodFilter === 'pix') return financialSummary.totalPixBalance;
+    if (paymentMethodFilter === 'especie') return financialSummary.totalEspecieBalance;
+    return financialSummary.totalBalance;
+  }, [financialSummary, paymentMethodFilter]);
 
   // Lessons summary with stock tracking
   const lessonsSummary = useMemo(() => {
@@ -165,6 +231,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
     // Populate with approved transactions
     transactions.forEach(t => {
       if (t.status !== 'approved') return;
+      if (paymentMethodFilter !== 'all' && t.paymentMethod !== paymentMethodFilter) return;
       const dateStr = t.date || '';
       if (dateStr.length < 7) return;
       const key = dateStr.slice(0, 7);
@@ -209,7 +276,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
     });
 
     return Array.from(monthsMap.values()).sort((a, b) => a.monthKey.localeCompare(b.monthKey));
-  }, [transactions]);
+  }, [transactions, paymentMethodFilter]);
 
   return (
     <div className="space-y-6">
@@ -276,6 +343,65 @@ export const Dashboard: React.FC<DashboardProps> = ({
         </div>
       )}
 
+      {/* Seletor para Distinguir Pix e Espécie */}
+      <div className="bg-white rounded-2xl p-4 sm:p-5 border border-slate-200 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3.5">
+        <div>
+          <div className="flex items-center gap-2">
+            <span className="text-sm font-bold text-slate-900">Distinguir Caixas por Forma de Pagamento</span>
+            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-200">
+              Pix vs Espécie
+            </span>
+          </div>
+          <p className="text-xs text-slate-500 mt-0.5">
+            Selecione para filtrar os saldos do Caixa 5% e do Caixa de Lições ou visualize o resumo unificado
+          </p>
+        </div>
+
+        <div className="flex items-center gap-1.5 bg-slate-100 p-1 rounded-xl self-start sm:self-auto shrink-0 flex-wrap">
+          <button
+            type="button"
+            onClick={() => setPaymentMethodFilter('all')}
+            className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-all cursor-pointer flex items-center gap-1.5 ${
+              paymentMethodFilter === 'all'
+                ? 'bg-white text-slate-900 shadow-xs ring-1 ring-slate-200'
+                : 'text-slate-600 hover:text-slate-900'
+            }`}
+          >
+            <span>🏛️ Todas as Formas</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setPaymentMethodFilter('pix')}
+            className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-all cursor-pointer flex items-center gap-1.5 ${
+              paymentMethodFilter === 'pix'
+                ? 'bg-teal-600 text-white shadow-xs'
+                : 'text-slate-600 hover:text-slate-900'
+            }`}
+          >
+            <span>💠 Pix</span>
+            <span className={`text-[10px] font-mono ${paymentMethodFilter === 'pix' ? 'text-teal-100' : 'text-slate-500'}`}>
+              ({formatCurrency(financialSummary.totalPixBalance)})
+            </span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setPaymentMethodFilter('especie')}
+            className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-all cursor-pointer flex items-center gap-1.5 ${
+              paymentMethodFilter === 'especie'
+                ? 'bg-emerald-600 text-white shadow-xs'
+                : 'text-slate-600 hover:text-slate-900'
+            }`}
+          >
+            <span>💵 Espécie</span>
+            <span className={`text-[10px] font-mono ${paymentMethodFilter === 'especie' ? 'text-emerald-100' : 'text-slate-500'}`}>
+              ({formatCurrency(financialSummary.totalEspecieBalance)})
+            </span>
+          </button>
+        </div>
+      </div>
+
       {/* Primary Financial Cards */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         
@@ -289,7 +415,14 @@ export const Dashboard: React.FC<DashboardProps> = ({
               <div className="w-8 h-8 rounded-lg bg-indigo-100 text-indigo-700 flex items-center justify-center font-bold text-xs">
                 5%
               </div>
-              <span className="font-bold text-slate-800 text-sm">Caixa 5%</span>
+              <div>
+                <span className="font-bold text-slate-800 text-sm block">Caixa 5%</span>
+                {paymentMethodFilter !== 'all' && (
+                  <span className={`text-[10px] font-bold ${paymentMethodFilter === 'pix' ? 'text-teal-700' : 'text-emerald-700'}`}>
+                    {paymentMethodFilter === 'pix' ? '💠 Filtrado: Pix' : '💵 Filtrado: Espécie'}
+                  </span>
+                )}
+              </div>
             </div>
             <span className="text-xs text-slate-400 group-hover:text-indigo-600 flex items-center gap-0.5">
               <span>Extrato</span>
@@ -300,15 +433,39 @@ export const Dashboard: React.FC<DashboardProps> = ({
           <div>
             <div className="text-xs text-slate-500 font-medium">Saldo em Caixa</div>
             <div className={`text-2xl font-black tracking-tight ${
-              financialSummary.balanceCaixa5 >= 0 ? 'text-slate-900' : 'text-rose-600'
+              currentCaixa5.balance >= 0 ? 'text-slate-900' : 'text-rose-600'
             }`}>
-              {formatCurrency(financialSummary.balanceCaixa5)}
+              {formatCurrency(currentCaixa5.balance)}
             </div>
           </div>
 
+          {/* Sub-breakdown Pix & Espécie (quando em visualização geral) */}
+          {paymentMethodFilter === 'all' && (
+            <div className="pt-2 pb-0.5 border-t border-slate-100 grid grid-cols-2 gap-2 text-xs">
+              <div className="bg-teal-50/70 border border-teal-100 p-2 rounded-xl">
+                <div className="text-[10px] text-teal-800 font-bold flex items-center gap-1">
+                  <span>💠</span>
+                  <span>Em Pix:</span>
+                </div>
+                <div className="font-extrabold text-slate-900 mt-0.5 font-mono text-xs">
+                  {formatCurrency(financialSummary.caixa5.pix.balance)}
+                </div>
+              </div>
+              <div className="bg-emerald-50/70 border border-emerald-100 p-2 rounded-xl">
+                <div className="text-[10px] text-emerald-800 font-bold flex items-center gap-1">
+                  <span>💵</span>
+                  <span>Em Espécie:</span>
+                </div>
+                <div className="font-extrabold text-slate-900 mt-0.5 font-mono text-xs">
+                  {formatCurrency(financialSummary.caixa5.especie.balance)}
+                </div>
+              </div>
+            </div>
+          )}
+
           <div className="pt-2 border-t border-slate-100 flex items-center justify-between text-xs">
-            <span className="text-emerald-700 font-semibold">+{formatCurrency(financialSummary.incomeCaixa5)}</span>
-            <span className="text-rose-600 font-semibold">-{formatCurrency(financialSummary.expenseCaixa5)}</span>
+            <span className="text-emerald-700 font-semibold">+{formatCurrency(currentCaixa5.income)}</span>
+            <span className="text-rose-600 font-semibold">-{formatCurrency(currentCaixa5.expense)}</span>
           </div>
         </div>
 
@@ -322,7 +479,14 @@ export const Dashboard: React.FC<DashboardProps> = ({
               <div className="w-8 h-8 rounded-lg bg-emerald-100 text-emerald-700 flex items-center justify-center font-bold text-xs">
                 📖
               </div>
-              <span className="font-bold text-slate-800 text-sm">Caixa de Lições</span>
+              <div>
+                <span className="font-bold text-slate-800 text-sm block">Caixa de Lições</span>
+                {paymentMethodFilter !== 'all' && (
+                  <span className={`text-[10px] font-bold ${paymentMethodFilter === 'pix' ? 'text-teal-700' : 'text-emerald-700'}`}>
+                    {paymentMethodFilter === 'pix' ? '💠 Filtrado: Pix' : '💵 Filtrado: Espécie'}
+                  </span>
+                )}
+              </div>
             </div>
             <span className="text-xs text-slate-400 group-hover:text-emerald-600 flex items-center gap-0.5">
               <span>Extrato</span>
@@ -333,15 +497,39 @@ export const Dashboard: React.FC<DashboardProps> = ({
           <div>
             <div className="text-xs text-slate-500 font-medium">Saldo em Caixa</div>
             <div className={`text-2xl font-black tracking-tight ${
-              financialSummary.balanceLicoes >= 0 ? 'text-slate-900' : 'text-rose-600'
+              currentLicoes.balance >= 0 ? 'text-slate-900' : 'text-rose-600'
             }`}>
-              {formatCurrency(financialSummary.balanceLicoes)}
+              {formatCurrency(currentLicoes.balance)}
             </div>
           </div>
 
+          {/* Sub-breakdown Pix & Espécie (quando em visualização geral) */}
+          {paymentMethodFilter === 'all' && (
+            <div className="pt-2 pb-0.5 border-t border-slate-100 grid grid-cols-2 gap-2 text-xs">
+              <div className="bg-teal-50/70 border border-teal-100 p-2 rounded-xl">
+                <div className="text-[10px] text-teal-800 font-bold flex items-center gap-1">
+                  <span>💠</span>
+                  <span>Em Pix:</span>
+                </div>
+                <div className="font-extrabold text-slate-900 mt-0.5 font-mono text-xs">
+                  {formatCurrency(financialSummary.licoes.pix.balance)}
+                </div>
+              </div>
+              <div className="bg-emerald-50/70 border border-emerald-100 p-2 rounded-xl">
+                <div className="text-[10px] text-emerald-800 font-bold flex items-center gap-1">
+                  <span>💵</span>
+                  <span>Em Espécie:</span>
+                </div>
+                <div className="font-extrabold text-slate-900 mt-0.5 font-mono text-xs">
+                  {formatCurrency(financialSummary.licoes.especie.balance)}
+                </div>
+              </div>
+            </div>
+          )}
+
           <div className="pt-2 border-t border-slate-100 flex items-center justify-between text-xs">
-            <span className="text-emerald-700 font-semibold">+{formatCurrency(financialSummary.incomeLicoes)}</span>
-            <span className="text-rose-600 font-semibold">-{formatCurrency(financialSummary.expenseLicoes)}</span>
+            <span className="text-emerald-700 font-semibold">+{formatCurrency(currentLicoes.income)}</span>
+            <span className="text-rose-600 font-semibold">-{formatCurrency(currentLicoes.expense)}</span>
           </div>
         </div>
 
@@ -352,7 +540,14 @@ export const Dashboard: React.FC<DashboardProps> = ({
               <div className="w-8 h-8 rounded-lg bg-slate-100 text-slate-800 flex items-center justify-center font-bold text-xs">
                 <Wallet className="w-4 h-4" />
               </div>
-              <span className="font-bold text-slate-800 text-sm">Total Geral da EBD</span>
+              <div>
+                <span className="font-bold text-slate-800 text-sm block">Total Geral da EBD</span>
+                {paymentMethodFilter !== 'all' && (
+                  <span className={`text-[10px] font-bold ${paymentMethodFilter === 'pix' ? 'text-teal-700' : 'text-emerald-700'}`}>
+                    {paymentMethodFilter === 'pix' ? '💠 Total em Pix' : '💵 Total em Espécie'}
+                  </span>
+                )}
+              </div>
             </div>
             <span className="text-[11px] font-semibold text-slate-500">Ambos os Caixas</span>
           </div>
@@ -360,9 +555,33 @@ export const Dashboard: React.FC<DashboardProps> = ({
           <div>
             <div className="text-xs text-slate-500 font-medium">Patrimônio Líquido</div>
             <div className="text-2xl font-black tracking-tight text-slate-900">
-              {formatCurrency(financialSummary.totalBalance)}
+              {formatCurrency(currentTotalBalance)}
             </div>
           </div>
+
+          {/* Sub-breakdown Pix & Espécie Total (quando em visualização geral) */}
+          {paymentMethodFilter === 'all' && (
+            <div className="pt-2 pb-0.5 border-t border-slate-100 grid grid-cols-2 gap-2 text-xs">
+              <div className="bg-teal-50/70 border border-teal-100 p-2 rounded-xl">
+                <div className="text-[10px] text-teal-800 font-bold flex items-center gap-1">
+                  <span>💠</span>
+                  <span>Total Pix:</span>
+                </div>
+                <div className="font-extrabold text-slate-900 mt-0.5 font-mono text-xs">
+                  {formatCurrency(financialSummary.totalPixBalance)}
+                </div>
+              </div>
+              <div className="bg-emerald-50/70 border border-emerald-100 p-2 rounded-xl">
+                <div className="text-[10px] text-emerald-800 font-bold flex items-center gap-1">
+                  <span>💵</span>
+                  <span>Total Espécie:</span>
+                </div>
+                <div className="font-extrabold text-slate-900 mt-0.5 font-mono text-xs">
+                  {formatCurrency(financialSummary.totalEspecieBalance)}
+                </div>
+              </div>
+            </div>
+          )}
 
           <div className="pt-2 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500">
             <span>Pendências de aprovação:</span>
@@ -627,10 +846,20 @@ export const Dashboard: React.FC<DashboardProps> = ({
                     </div>
                     <div>
                       <div className="font-semibold text-slate-800 line-clamp-1">{t.description}</div>
-                      <div className="text-[11px] text-slate-400 flex items-center gap-2">
+                      <div className="text-[11px] text-slate-400 flex items-center gap-2 mt-0.5">
                         <span>{formatDate(t.date)}</span>
                         <span>•</span>
                         <span>{getAccountName(t.account)}</span>
+                        {t.paymentMethod && (
+                          <>
+                            <span>•</span>
+                            <span className={`inline-flex items-center gap-1 font-semibold ${
+                              t.paymentMethod === 'pix' ? 'text-teal-700' : 'text-emerald-700'
+                            }`}>
+                              <span>{t.paymentMethod === 'pix' ? '💠 Pix' : '💵 Espécie'}</span>
+                            </span>
+                          </>
+                        )}
                       </div>
                     </div>
                   </div>

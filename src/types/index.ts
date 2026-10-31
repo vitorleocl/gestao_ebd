@@ -13,6 +13,12 @@ export interface UserProfile {
 export type AccountType = 'caixa_5' | 'caixa_licoes';
 export type TransactionType = 'income' | 'expense';
 export type TransactionStatus = 'approved' | 'pending' | 'rejected';
+export type PaymentMethod = 'pix' | 'especie';
+
+export const PAYMENT_METHODS = [
+  { id: 'pix', label: 'Pix', icon: '💠' },
+  { id: 'especie', label: 'Espécie', icon: '💵' }
+] as const;
 
 export interface FinancialTransaction {
   id: string;
@@ -20,6 +26,7 @@ export interface FinancialTransaction {
   account: AccountType;
   category?: string;
   amount: number;
+  paymentMethod?: PaymentMethod;
   date: string;
   description: string;
   receiptUrl?: string;
@@ -107,6 +114,7 @@ export interface LessonOrder {
   totalAmount?: number;
   paymentStatus: PaymentStatus;
   deliveryStatus: DeliveryStatus;
+  paymentMethod?: PaymentMethod;
   requestedAt: string;
   paidAt?: string;
   deliveredAt?: string;
