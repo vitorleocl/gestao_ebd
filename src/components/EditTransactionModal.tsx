@@ -49,7 +49,7 @@ export const EditTransactionModal: React.FC<EditTransactionModalProps> = ({
   // Form states
   const [formType, setFormType] = useState<TransactionType>('income');
   const [formAccount, setFormAccount] = useState<AccountType>('caixa_5');
-  const [formPaymentMethod, setFormPaymentMethod] = useState<PaymentMethod>('pix');
+  const [formPaymentMethod, setFormPaymentMethod] = useState<PaymentMethod>('especie');
   const [formCategory, setFormCategory] = useState<string>(INCOME_CATEGORIES[0]);
   const [formAmount, setFormAmount] = useState<string>('');
   const [formDate, setFormDate] = useState<string>('');
@@ -80,7 +80,7 @@ export const EditTransactionModal: React.FC<EditTransactionModalProps> = ({
     if (transaction && isOpen) {
       setFormType(transaction.type);
       setFormAccount(transaction.account);
-      setFormPaymentMethod(transaction.paymentMethod || 'pix');
+      setFormPaymentMethod(transaction.paymentMethod || 'especie');
       setFormCategory(
         transaction.category || 
         (transaction.type === 'income' ? INCOME_CATEGORIES[0] : EXPENSE_CATEGORIES[0])

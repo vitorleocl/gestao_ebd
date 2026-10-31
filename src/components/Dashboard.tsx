@@ -80,7 +80,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
       if (t.status !== 'approved') return;
 
       const isPix = t.paymentMethod === 'pix';
-      const isEspecie = t.paymentMethod === 'especie';
+      const isEspecie = t.paymentMethod !== 'pix'; // All existing/historical transactions default to Espécie
 
       if (t.account === 'caixa_5') {
         if (t.type === 'income') {
@@ -231,7 +231,8 @@ export const Dashboard: React.FC<DashboardProps> = ({
     // Populate with approved transactions
     transactions.forEach(t => {
       if (t.status !== 'approved') return;
-      if (paymentMethodFilter !== 'all' && t.paymentMethod !== paymentMethodFilter) return;
+      const method = t.paymentMethod || 'especie';
+      if (paymentMethodFilter !== 'all' && method !== paymentMethodFilter) return;
       const dateStr = t.date || '';
       if (dateStr.length < 7) return;
       const key = dateStr.slice(0, 7);

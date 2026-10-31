@@ -105,28 +105,18 @@ export const getPaymentMethodBadge = (
       border: 'border-teal-200'
     };
   }
-  if (method === 'especie') {
-    return {
-      label: 'Espécie',
-      shortLabel: 'Espécie',
-      icon: '💵',
-      color: 'text-emerald-800',
-      bg: 'bg-emerald-50',
-      border: 'border-emerald-200'
-    };
-  }
+  // Default to Espécie for all historical/unspecified transactions as requested
   return {
-    label: 'Não informado',
-    shortLabel: '—',
-    icon: '💰',
-    color: 'text-slate-600',
-    bg: 'bg-slate-50',
-    border: 'border-slate-200'
+    label: 'Espécie',
+    shortLabel: 'Espécie',
+    icon: '💵',
+    color: 'text-emerald-800',
+    bg: 'bg-emerald-50',
+    border: 'border-emerald-200'
   };
 };
 
 export const getPaymentMethodLabel = (method?: string | null): string => {
   if (method === 'pix') return 'Pix';
-  if (method === 'especie') return 'Espécie';
-  return 'Não informado';
+  return 'Espécie';
 };

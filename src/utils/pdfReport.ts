@@ -315,7 +315,7 @@ export function generateMonthlyFinancialReportPdf({
   const transactionTableRows = monthTransactions.map(t => {
     const isInc = t.type === 'income';
     const accLabel = t.account === 'caixa_5' ? 'Caixa 5%' : 'Lições';
-    const methodLabel = t.paymentMethod === 'pix' ? 'Pix' : t.paymentMethod === 'especie' ? 'Espécie' : '—';
+    const methodLabel = t.paymentMethod === 'pix' ? 'Pix' : 'Espécie';
     const valFormatted = `${isInc ? '+' : '-'} ${formatCurrency(t.amount)}`;
     return [
       formatDate(t.date),

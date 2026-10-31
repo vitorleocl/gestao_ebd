@@ -30,7 +30,8 @@ import {
   addDoc, 
   updateDoc, 
   deleteDoc, 
-  doc 
+  doc,
+  writeBatch 
 } from 'firebase/firestore';
 import { db, handleFirestoreError, OperationType } from '../firebase/config';
 import { useAuth } from '../context/AuthContext';
@@ -75,7 +76,7 @@ export const FinancialModule: React.FC<FinancialModuleProps> = ({
   transactions,
   loading
 }) => {
-  const { currentUser, userProfile, isMaster, isDirigente } = useAuth();
+  const { currentUser, userProfile, isMaster, isDirigente, isTesouraria } = useAuth();
 
   // Filters state
   const [selectedAccount, setSelectedAccount] = useState<'all' | AccountType>('all');
@@ -91,11 +92,15 @@ export const FinancialModule: React.FC<FinancialModuleProps> = ({
   // Monthly Financial PDF Report Modal
   const [isPdfModalOpen, setIsPdfModalOpen] = useState(false);
 
+  // Batch Standardize All to Especie Modal
+  const [isBatchStandardizeModalOpen, setIsBatchStandardizeModalOpen] = useState(false);
+  const [isBatchUpdating, setIsBatchUpdating] = useState(false);
+
   // New Transaction Form Modal
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [formType, setFormType] = useState<TransactionType>('income');
   const [formAccount, setFormAccount] = useState<AccountType>('caixa_5');
-  const [formPaymentMethod, setFormPaymentMethod] = useState<PaymentMethod>('pix');
+  const [formPaymentMethod, setFormPaymentMethod] = useState<PaymentMethod>('especie');
   const [formCategory, setFormCategory] = useState<string>(INCOME_CATEGORIES[0]);
   const [formAmount, setFormAmount] = useState<string>('');
   const [formDate, setFormDate] = useState<string>(getTodayDateString());
@@ -197,7 +202,10 @@ export const FinancialModule: React.FC<FinancialModuleProps> = ({
       }
 
       // Payment method filter
-      if (selectedPaymentMethod !== 'all' && t.paymentMethod !== selectedPaymentMethod) return false;
+      if (selectedPaymentMethod !== 'all') {
+        const method = t.paymentMethod || 'especie';
+        if (method !== selectedPaymentMethod) return false;
+      }
 
       return true;
     }).sort((a, b) => {
@@ -235,7 +243,7 @@ export const FinancialModule: React.FC<FinancialModuleProps> = ({
       if (t.status !== 'approved') return;
 
       const isPix = t.paymentMethod === 'pix';
-      const isEspecie = t.paymentMethod === 'especie';
+      const isEspecie = t.paymentMethod !== 'pix'; // All historical/unspecified records default to Espécie
 
       if (t.account === 'caixa_5') {
         if (t.type === 'income') {
@@ -488,7 +496,7 @@ export const FinancialModule: React.FC<FinancialModuleProps> = ({
   // Quick toggle payment method between Pix and Espécie
   const handleQuickTogglePaymentMethod = async (t: FinancialTransaction) => {
     if (!currentUser) return;
-    const currentMethod = t.paymentMethod || 'pix';
+    const currentMethod = t.paymentMethod || 'especie';
     const nextMethod: PaymentMethod = currentMethod === 'pix' ? 'especie' : 'pix';
     setActionLoadingId(t.id);
     try {
@@ -524,6 +532,58 @@ export const FinancialModule: React.FC<FinancialModuleProps> = ({
       });
     } finally {
       setActionLoadingId(null);
+    }
+  };
+
+  // Standardize all historical/existing transactions as 'especie' in Firestore
+  const handleStandardizeAllAsEspecie = async () => {
+    if (!currentUser) return;
+    if (!isMaster && !isDirigente && !isTesouraria) return;
+
+    setIsBatchUpdating(true);
+    try {
+      // Find transactions that are not explicitly marked as 'especie'
+      const targets = transactions.filter(t => t.paymentMethod !== 'especie');
+      if (targets.length === 0) {
+        setActionMessage({
+          type: 'success',
+          text: 'Todos os lançamentos já estão configurados como Espécie no banco de dados!'
+        });
+        setIsBatchStandardizeModalOpen(false);
+        setTimeout(() => setActionMessage(null), 4000);
+        return;
+      }
+
+      const chunkSize = 400;
+      const nowIso = new Date().toISOString();
+      for (let i = 0; i < targets.length; i += chunkSize) {
+        const chunk = targets.slice(i, i + chunkSize);
+        const batch = writeBatch(db);
+        chunk.forEach(t => {
+          const ref = doc(db, 'transactions', t.id);
+          batch.update(ref, {
+            paymentMethod: 'especie',
+            updatedAt: nowIso
+          });
+        });
+        await batch.commit();
+      }
+
+      setActionMessage({
+        type: 'success',
+        text: `Concluído com sucesso! ${targets.length} lançamento(s) foram definidos como Espécie. Agora você pode ajustar os que foram Pix com 1 clique na coluna Forma.`
+      });
+      setIsBatchStandardizeModalOpen(false);
+      setTimeout(() => setActionMessage(null), 6000);
+    } catch (err: unknown) {
+      console.error("Erro ao padronizar lançamentos como Espécie:", err);
+      handleFirestoreError(err, OperationType.UPDATE, 'transactions');
+      setActionMessage({
+        type: 'error',
+        text: 'Não foi possível concluir a gravação em lote dos lançamentos.'
+      });
+    } finally {
+      setIsBatchUpdating(false);
     }
   };
 
@@ -627,6 +687,19 @@ export const FinancialModule: React.FC<FinancialModuleProps> = ({
         </div>
 
         <div className="flex items-center gap-2.5 flex-wrap">
+          {(isMaster || isDirigente || isTesouraria) && (
+            <button
+              id="btn-padronizar-especie"
+              type="button"
+              onClick={() => setIsBatchStandardizeModalOpen(true)}
+              title="Definir todos os lançamentos como Espécie no banco de dados"
+              className="inline-flex items-center justify-center gap-2 px-3.5 py-2.5 bg-emerald-50 hover:bg-emerald-100 active:bg-emerald-200 text-emerald-800 border border-emerald-200 text-sm font-bold rounded-xl shadow-2xs transition-all cursor-pointer"
+            >
+              <span>💵</span>
+              <span>Definir Todos como Espécie</span>
+            </button>
+          )}
+
           <button
             id="btn-exportar-relatorio-pdf"
             type="button"
@@ -961,13 +1034,21 @@ export const FinancialModule: React.FC<FinancialModuleProps> = ({
 
       {/* Transactions List */}
       <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
-        <div className="p-4 border-b border-slate-200 bg-slate-50/70 flex items-center justify-between">
-          <h3 className="font-bold text-slate-900 text-sm">
-            Extrato de Lançamentos ({filteredTransactions.length})
-          </h3>
-          <span className="text-xs text-slate-500">
-            {selectedAccount === 'all' ? 'Ambos os Caixas' : getAccountName(selectedAccount)}
-          </span>
+        <div className="p-4 border-b border-slate-200 bg-slate-50/70 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
+            <h3 className="font-bold text-slate-900 text-sm">
+              Extrato de Lançamentos ({filteredTransactions.length})
+            </h3>
+            <span className="text-[11px] font-semibold text-emerald-800 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full flex items-center gap-1">
+              <span>💵</span>
+              <span>Padrão: Espécie</span>
+            </span>
+          </div>
+          <div className="flex items-center gap-2 text-xs text-slate-500">
+            <span>{selectedAccount === 'all' ? 'Ambos os Caixas' : getAccountName(selectedAccount)}</span>
+            <span className="hidden md:inline">•</span>
+            <span className="hidden md:inline text-[11px] text-slate-500">Clique em <strong className="text-slate-700 font-bold">⇄</strong> para alternar para Pix</span>
+          </div>
         </div>
 
         {loading ? (
@@ -1635,6 +1716,86 @@ export const FinancialModule: React.FC<FinancialModuleProps> = ({
         onClose={() => setIsPdfModalOpen(false)}
         transactions={transactions}
       />
+
+      {/* BATCH STANDARDIZE ALL AS ESPECIE MODAL */}
+      {isBatchStandardizeModalOpen && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in duration-200">
+          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-slate-200 space-y-4 relative">
+            <div className="flex items-start justify-between gap-3">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-emerald-100 text-emerald-800 flex items-center justify-center text-xl shrink-0">
+                  💵
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-slate-900">
+                    Definir Todos como Espécie
+                  </h3>
+                  <p className="text-xs text-slate-500">
+                    Atualização em lote para Caixa 5% e Lições
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                disabled={isBatchUpdating}
+                onClick={() => setIsBatchStandardizeModalOpen(false)}
+                className="text-slate-400 hover:text-slate-600 p-1 rounded-lg transition-colors cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="text-xs text-slate-600 leading-relaxed space-y-2">
+              <p>
+                Conforme solicitado, esta ação definirá <strong>todos os seus lançamentos anteriores como Espécie</strong> no banco de dados.
+              </p>
+              <p>
+                Depois disso, você poderá navegar pelo extrato e <strong>clicar no botão '⇄' da coluna Forma</strong> para alternar individualmente para <strong>Pix</strong> os lançamentos que foram de fato via Pix.
+              </p>
+            </div>
+
+            <div className="p-3.5 bg-emerald-50 rounded-xl border border-emerald-200 text-xs text-emerald-900 space-y-1">
+              <div className="flex justify-between font-semibold">
+                <span>Total de lançamentos no sistema:</span>
+                <span>{transactions.length}</span>
+              </div>
+              <div className="flex justify-between text-emerald-700">
+                <span>Lançamentos que serão gravados como Espécie:</span>
+                <span className="font-bold">{transactions.filter(t => t.paymentMethod !== 'especie').length}</span>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-2.5 pt-2">
+              <button
+                type="button"
+                disabled={isBatchUpdating}
+                onClick={() => setIsBatchStandardizeModalOpen(false)}
+                className="px-4 py-2 text-xs font-semibold text-slate-600 hover:text-slate-800 rounded-xl hover:bg-slate-100 transition-colors cursor-pointer"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                disabled={isBatchUpdating}
+                onClick={handleStandardizeAllAsEspecie}
+                className="inline-flex items-center justify-center gap-2 px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white text-xs font-bold rounded-xl shadow-sm shadow-emerald-200 transition-all cursor-pointer disabled:opacity-50"
+              >
+                {isBatchUpdating ? (
+                  <>
+                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                    <span>Atualizando no Banco...</span>
+                  </>
+                ) : (
+                  <>
+                    <span>💵</span>
+                    <span>Confirmar e Gravar Todos</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
     </div>
   );

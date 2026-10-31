@@ -140,7 +140,7 @@ export const LessonsModule: React.FC<LessonsModuleProps> = ({
   const [payModalOrder, setPayModalOrder] = useState<LessonOrder | null>(null);
   const [payAutoGenerateCashEntry, setPayAutoGenerateCashEntry] = useState<boolean>(true);
   const [payAmount, setPayAmount] = useState<string>('');
-  const [payPaymentMethod, setPayPaymentMethod] = useState<PaymentMethod>('pix');
+  const [payPaymentMethod, setPayPaymentMethod] = useState<PaymentMethod>('especie');
 
   // Status message notification
   const [statusMessage, setStatusMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
@@ -584,7 +584,7 @@ export const LessonsModule: React.FC<LessonsModuleProps> = ({
       setPayModalOrder(order);
       const estimated = order.totalAmount || (order.unitPrice ? order.unitPrice * order.quantity : order.quantity * 15);
       setPayAmount(estimated.toString());
-      setPayPaymentMethod(order.paymentMethod || 'pix');
+      setPayPaymentMethod(order.paymentMethod || 'especie');
       setPayAutoGenerateCashEntry(true);
     } else {
       // Toggle from pago back to nao_pago
@@ -606,7 +606,7 @@ export const LessonsModule: React.FC<LessonsModuleProps> = ({
   // Quick toggle order payment method between Pix and Espécie
   const handleQuickToggleOrderPaymentMethod = async (order: LessonOrder) => {
     if (!currentUser) return;
-    const current = order.paymentMethod || 'pix';
+    const current = order.paymentMethod || 'especie';
     const nextMethod: PaymentMethod = current === 'pix' ? 'especie' : 'pix';
     try {
       await updateDoc(doc(db, 'lessonOrders', order.id), {
